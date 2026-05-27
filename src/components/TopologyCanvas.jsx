@@ -5,6 +5,7 @@ import { HOST_W, HOST_H, ZONE_W, ZONE_H, ZONE_PAD } from "../constants/layout";
 // ─── Topology Canvas (SVG) ────────────────────────────────────────
 export default function TopologyCanvas({ state, setState, mode, connectFrom, setConnectFrom, onSelect, selectedId, showAttackPaths = false }) {
   const svgRef = useRef(null);
+  const dragStartRef = useRef(null);
   const [dragging, setDragging] = useState(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [wasDragged, setWasDragged] = useState(false);
@@ -18,6 +19,29 @@ export default function TopologyCanvas({ state, setState, mode, connectFrom, set
     const scaleY = 480 / rect.height;
     return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
   }, []);
+
+    const onZoneBoxMouseDown = useCallback((e, zoneId) => {
+    e.stopPropagation();
+
+    if (mode !== "select") return;
+
+    const pt = getSvgPoint(e);
+
+    const zone = state.zones.find((z) => z.id === zoneId);
+    if (!zone) return;
+
+    const hostsInZone = state.hosts.filter((h) => h.zoneId === zoneId);
+
+    dragStartRef.current = {
+        startPoint: pt,
+        zone: { ...zone },
+        hosts: hostsInZone.map((h) => ({ ...h })),
+    };
+
+    setClickTarget({ id: zoneId, type: "zone" });
+    setDragging({ id: zoneId, type: "zoneBox" });
+    setWasDragged(false);
+    }, [mode, getSvgPoint, state.zones, state.hosts]);
 
   const onMouseDown = useCallback((e, id, type) => {
     e.stopPropagation();
@@ -73,37 +97,101 @@ export default function TopologyCanvas({ state, setState, mode, connectFrom, set
 
   const onMouseMove = useCallback((e) => {
     if (!dragging) return;
+
     const pt = getSvgPoint(e);
+
+    // Drag entire zone box together with all hosts inside it
+    if (dragging.type === "zoneBox") {
+        const start = dragStartRef.current;
+        if (!start) return;
+
+        const dx = pt.x - start.startPoint.x;
+        const dy = pt.y - start.startPoint.y;
+
+        if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+        setWasDragged(true);
+        }
+
+        setState((s) => ({
+        ...s,
+
+        zones: s.zones.map((z) =>
+            z.id === dragging.id
+            ? {
+                ...z,
+                x: Math.max(10, Math.min(880, start.zone.x + dx)),
+                y: Math.max(10, Math.min(460, start.zone.y + dy)),
+                }
+            : z
+        ),
+
+        hosts: s.hosts.map((h) => {
+            const originalHost = start.hosts.find((sh) => sh.id === h.id);
+
+            if (!originalHost) return h;
+
+            return {
+            ...h,
+            x: Math.max(10, Math.min(880, originalHost.x + dx)),
+            y: Math.max(10, Math.min(460, originalHost.y + dy)),
+            };
+        }),
+        }));
+
+        return;
+    }
+
+    // Existing behavior for dragging individual zones/hosts
     const nx = Math.max(10, Math.min(880, pt.x - dragOffset.x));
     const ny = Math.max(10, Math.min(460, pt.y - dragOffset.y));
 
     const item = dragging.type === "zone"
-      ? state.zones.find(z => z.id === dragging.id)
-      : state.hosts.find(h => h.id === dragging.id);
+        ? state.zones.find((z) => z.id === dragging.id)
+        : state.hosts.find((h) => h.id === dragging.id);
 
     if (item && (Math.abs(item.x - nx) > 2 || Math.abs(item.y - ny) > 2)) {
-      setWasDragged(true);
+        setWasDragged(true);
     }
 
     if (dragging.type === "zone") {
-      setState(s => ({ ...s, zones: s.zones.map(z => z.id === dragging.id ? { ...z, x: nx, y: ny } : z) }));
+        setState((s) => ({
+        ...s,
+        zones: s.zones.map((z) =>
+            z.id === dragging.id ? { ...z, x: nx, y: ny } : z
+        ),
+        }));
     } else {
-      setState(s => ({ ...s, hosts: s.hosts.map(h => h.id === dragging.id ? { ...h, x: nx, y: ny } : h) }));
+        setState((s) => ({
+        ...s,
+        hosts: s.hosts.map((h) =>
+            h.id === dragging.id ? { ...h, x: nx, y: ny } : h
+        ),
+        }));
     }
-  }, [dragging, dragOffset, getSvgPoint, setState, state.hosts, state.zones]);
+    }, [
+    dragging,
+    dragOffset,
+    getSvgPoint,
+    setState,
+    state.hosts,
+    state.zones,
+    ]);
 
-  const onMouseUp = useCallback((e) => {
+    const onMouseUp = useCallback((e) => {
     if (mode === "select" && !wasDragged && clickTarget) {
-      if (selectedId === clickTarget.id) {
+        if (selectedId === clickTarget.id) {
         onSelect?.(null);
-      } else {
+        } else {
         onSelect?.(clickTarget);
-      }
+        }
     }
+
     setDragging(null);
     setWasDragged(false);
+    dragStartRef.current = null;
+
     setTimeout(() => setClickTarget(null), 0);
-  }, [mode, wasDragged, clickTarget, onSelect, selectedId]);
+    }, [mode, wasDragged, clickTarget, onSelect, selectedId]);
 
   const handleCanvasClick = useCallback((e) => {
     if (mode === "select" && !wasDragged && !clickTarget) {
@@ -154,14 +242,30 @@ export default function TopologyCanvas({ state, setState, mode, connectFrom, set
       </defs>
 
       {/* Zone bounding backgrounds */}
-      {state.zones.map(z => {
+      {state.zones.map((z) => {
         const b = zoneBounds[z.id];
         if (!b) return null;
+
         return (
-          <rect key={z.id + "_bg"} x={b.x} y={b.y} width={b.w} height={b.h} rx="14"
-            fill={z.color} fillOpacity="0.07" stroke={z.color} strokeWidth="0.5" strokeDasharray="6 3"/>
+            <rect
+            key={z.id + "_bg"}
+            x={b.x}
+            y={b.y}
+            width={b.w}
+            height={b.h}
+            rx="14"
+            fill={z.color}
+            fillOpacity="0.07"
+            stroke={z.color}
+            strokeWidth="0.5"
+            strokeDasharray="6 3"
+            style={{
+                cursor: mode === "select" ? "grab" : "default",
+            }}
+            onMouseDown={(e) => onZoneBoxMouseDown(e, z.id)}
+            />
         );
-      })}
+        })}
 
       {/* Zone connections */}
       {state.zoneConnections.map((c, i) => {
