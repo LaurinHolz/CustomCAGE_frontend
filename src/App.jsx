@@ -9,6 +9,7 @@ import AttackGraphCanvas from "./components/AttackGraphCanvas"
 import DetailSidebar from "./components/DetailSidebar";
 import OverviewPanel from "./components/OverviewPanel";
 import ConfigPanel from "./components/ConfigPanel";
+import LiveFilePlots from "./components/LiveFilePlots";
 
 // ─── Main App ─────────────────────────────────────────────────────
 export default function App() {
@@ -100,7 +101,12 @@ export default function App() {
       </div>
 
       <div style={S.tabs}>
-        {[["topology","Topology"],["attack","Attack graph"],["overview","Overview"],["config","Config"]].map(([k,v]) => (
+        {[["topology","Topology"],
+        ["attack","Attack graph"],
+        ["overview","Overview"],
+        ["config","Config"],
+        ["live", "Live plots"]
+      ].map(([k,v]) => (
           <button key={k} style={S.tab(tab === k)} onClick={() => { setTab(k); setMode("select"); setConnectFrom(null); }}>{v}</button>
         ))}
       </div>
@@ -196,6 +202,8 @@ export default function App() {
 
       {tab === "overview" && <OverviewPanel state={state}/>}
       {tab === "config" && <ConfigPanel state={state} setState={setState}/>}
+      {tab === "live" && <LiveFilePlots />}
+
 
       {toast && <div style={S.toast}>{toast}</div>}
     </div>
