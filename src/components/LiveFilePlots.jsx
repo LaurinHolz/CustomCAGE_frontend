@@ -30,15 +30,15 @@ const PLOTS = [
     color: "#1D9E75",
   },
   {
-    id: "loss",
-    title: "Loss",
-    yLabel: "Loss",
+    id: "restore",
+    title: "Restore Efficiency",
+    yLabel: "Restore Efficiency",
     color: "#E24B4A",
   },
   {
-    id: "accuracy",
-    title: "Accuracy",
-    yLabel: "Accuracy",
+    id: "compromised",
+    title: "Compromised Entities",
+    yLabel: "Compromised Entities",
     color: "#3B8BD4",
   },
 ];
@@ -244,8 +244,8 @@ function computePlotValuesFromFile(file, fileIndex) {
       x: toNumber(lastRow.step) ?? toNumber(lastRow.episode) ?? fileIndex,
 
       reward: toNumber(lastRow.reward),
-      loss: toNumber(lastRow.loss),
-      accuracy: toNumber(lastRow.accuracy),
+      restore: toNumber(lastRow.restore),
+      compromised: toNumber(lastRow.compromised),
     };
   }
 
@@ -265,16 +265,16 @@ function computePlotValuesFromFile(file, fileIndex) {
       x: toNumber(data.step) ?? toNumber(data.episode) ?? fileIndex,
 
       reward: toNumber(data.reward),
-      loss: toNumber(data.loss),
-      accuracy: toNumber(data.accuracy),
+      restore: toNumber(data.restore),
+      compromised: toNumber(data.compromised),
     };
   }
 
   return {
     x: fileIndex,
     reward: null,
-    loss: null,
-    accuracy: null,
+    restore: null,
+    compromised: null,
   };
 }
 
