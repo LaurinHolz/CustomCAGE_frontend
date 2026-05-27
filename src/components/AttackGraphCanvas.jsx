@@ -1,4 +1,8 @@
 // ─── Attack Graph Canvas (mit gruppierter Anordnung in Spalten) ──────────────
+import { useState, useCallback, useRef } from "react";
+import { S } from "../styles/styles";
+import { HOST_W, HOST_H } from "../constants/layout";
+
 export default function AttackGraphCanvas({ state, setState, mode, connectFrom, setConnectFrom, onSelect, selectedId }) {
   const svgRef = useRef(null);
   const [dragging, setDragging] = useState(null);
