@@ -293,18 +293,20 @@ function PlotCard({ plot, points }) {
       labels: points.map((point) => point.x),
       datasets: [
         {
-          label: plot.yLabel,
-          data: points.map((point) => point.y),
-          tension: 0.28,
-          pointRadius: 3,
-          pointHoverRadius: 5,
-          borderWidth: 2.5,
-          borderColor: plot.color,
-          backgroundColor: plot.color,
-          pointBackgroundColor: plot.color,
-          pointBorderColor: plot.color,
+            label: plot.yLabel,
+            data: points.map((point) => point.y),
+            tension: 0.28,
+            pointRadius: points.map((_, index) =>
+            index === points.length - 1 ? 5 : 3
+            ),
+            pointHoverRadius: 6,
+            borderWidth: 2.5,
+            borderColor: plot.color,
+            backgroundColor: plot.color,
+            pointBackgroundColor: plot.color,
+            pointBorderColor: plot.color,
         },
-      ],
+        ],
     }),
     [points, plot]
   );
@@ -313,7 +315,10 @@ function PlotCard({ plot, points }) {
     () => ({
       responsive: true,
       maintainAspectRatio: false,
-      animation: false,
+      animation: {
+        duration: 700,
+        easing: "easeOutQuart",
+        },
 
       plugins: {
         legend: {
