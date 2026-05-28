@@ -202,7 +202,9 @@ export default function App() {
 
       {tab === "overview" && <OverviewPanel state={state}/>}
       {tab === "config" && <ConfigPanel state={state} setState={setState}/>}
-      {tab === "live" && <LiveFilePlots />}
+      <div style={{ display: tab === "live" ? "block" : "none" }}>
+        <LiveFilePlots />
+      </div>
 
 
       {toast && <div style={S.toast}>{toast}</div>}
