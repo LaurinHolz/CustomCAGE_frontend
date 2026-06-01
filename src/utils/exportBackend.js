@@ -1,79 +1,81 @@
-// Helper to get host order matching backend
-export function getHostOrder(hosts) {
-  const order = ['def', 'ent0', 'ent1', 'ent2', 'ophost0', 'ophost1', 'ophost2', 'opserv', 'user0', 'user1', 'user2', 'user3', 'user4'];
-  return order.filter(name => hosts.some(h => h.name === name));
-}
-
 export function exportToBackendFormat(state) {
-  // Verwende die tatsächlichen Hosts aus dem State (nicht feste Namen)
   const hostsInOrder = state.hosts;
 
-  console.log('Exporting hosts:', hostsInOrder.map(h => ({ name: h.name, services: h.services, decoys: h.decoys })));
-
-  // Build CONNECTED_HOSTS array (basierend auf Attack Paths)
+  // CONNECTED_HOSTS: for each host, list of target host names it can reach (from attackPaths)
   const connectedHosts = hostsInOrder.map(host => {
-    // Finde einen Attack Path WO dieser Host die Quelle ist
-    const attackPath = state.attackPaths.find(p => p.from === host.id);
-    if (!attackPath) return null;
-    const target = state.hosts.find(h => h.id === attackPath.to);
-    return target ? target.name : null;
+    const paths = state.attackPaths.filter(p => p.from === host.id);
+    if (paths.length === 0) return null;
+    const targets = paths.map(p => state.hosts.find(h => h.id === p.to)?.name).filter(Boolean);
+    return targets.length > 0 ? targets : null;
   });
 
-  // Build HOST_EXPLOITS (Services per host)
-  const hostExploits = hostsInOrder.map(h => [...h.services]);
+  // HOST_EXPLOITS, HOST_DECOYS, HOST_PRIORITY, REWARDED_EXPLOITS per host
+  const hostExploits       = hostsInOrder.map(h => [...h.services]);
+  const hostDecoys         = hostsInOrder.map(h => [...h.decoys]);
+  const hostPriority       = hostsInOrder.map(h => h.priority ?? 1);
+  const rewardedExploits   = hostsInOrder.map(h => [...(h.rewardedExploits || [])]);
 
-  // Build HOST_DECOYS (Decoys per host)
-  const hostDecoys = hostsInOrder.map(h => [...h.decoys]);
-
-  // Build REWARDED_EXPLOITS (basierend auf Host-Namen und Services)
-  const rewardedExploits = hostsInOrder.map(host => {
-    const rewards = [];
-
-    // Hier können Sie Ihre eigene Logik für Rewards implementieren
-    // Für Custom-Netzwerke erstmal leer lassen
-    // Basierend auf Host-Namen oder Services
-    if (host.name === 'server1' && host.services.includes('Keep')) {
-      rewards.push('Keep');
-    }
-    if (host.name === 'host0' && host.services.includes('Haraka')) {
-      rewards.push('Haraka');
-    }
-
-    return rewards;
-  });
-
-  // Build ATTACK_PATHS als Array von [from_hostname, to_hostname]
+  // ATTACK_PATHS: [[from_name, to_name], ...]
   const attackPaths = state.attackPaths.map(c => {
     const f = state.hosts.find(h => h.id === c.from);
     const t = state.hosts.find(h => h.id === c.to);
     return f && t ? [f.name, t.name] : null;
   }).filter(Boolean);
 
-  // Build ZONE_CONNECTIONS
+  // ZONE_CONNECTIONS: [[from_zone_name, to_zone_name], ...]
   const zoneConnections = state.zoneConnections.map(c => {
     const fromZone = state.zones.find(z => z.id === c.from);
-    const toZone = state.zones.find(z => z.id === c.to);
+    const toZone   = state.zones.find(z => z.id === c.to);
     return fromZone && toZone ? [fromZone.name, toZone.name] : null;
   }).filter(Boolean);
 
-  const result = {
-    RED_ACTIONS: state.redActions,
-    BLUE_ACTIONS: state.blueActions,
-    NUM_SUBNETS: state.zones.length,
-    HOSTS: hostsInOrder.map(h => h.name),
-    HOST_EXPLOITS: hostExploits,
-    CONNECTED_HOSTS: connectedHosts,
-    EXPLOITS: state.exploits,
-    DECOYS: state.decoys,
-    HOST_DECOYS: hostDecoys,
-    EXPLOIT_OUTCOME: state.exploitOutcomes,
-    REWARDED_EXPLOITS: rewardedExploits,
-    ZONE_CONNECTIONS: zoneConnections,
-    ATTACK_PATHS: attackPaths,
-  };
+  // SUBNETS: { zoneId: [hostName, ...] }
+  const subnets = {};
+  state.zones.forEach(z => {
+    subnets[z.id] = hostsInOrder.filter(h => h.zoneId === z.id).map(h => h.name);
+  });
 
-  console.log('Final JSON:', JSON.stringify(result, null, 2));
-  return result;
+  // Scenario role host IDs → names
+  const hostName = (id) => state.hosts.find(h => h.id === id)?.name ?? null;
+  const hostNames = (ids) => (ids || []).map(id => hostName(id)).filter(Boolean);
+
+  return {
+    SUBNETS:           subnets,
+    TARGET:            hostName(state.target),
+    ENTRY_POINT:       hostName(state.entryPoint),
+    TARGET_GATEWAY:    hostName(state.targetGateway),
+    RED_START_HOST:    hostName(state.redStartHost),
+    DEFENDER_HOSTS:    hostNames(state.defenderHosts),
+    USERS:             hostNames(state.users),
+    GREEN_HOSTS:       hostNames(state.greenHosts),
+
+    EXPLOIT_PRIO:      state.exploitPrio  ?? 0.75,
+    EXPLOIT_OBS:       state.exploitObs   ?? 0.95,
+    REMOVE_SUCCESS:    state.removeSuccess  ?? 1.0,
+    RESTORE_SUCCESS:   state.restoreSuccess ?? 1.0,
+
+    RED_ACTIONS:       state.redActions,
+    BLUE_ACTIONS:      state.blueActions,
+
+    AGENT_LOCKOUT:     state.agentLockout,
+    HOST_LOCKOUT:      state.hostLockout,
+
+    NUM_SUBNETS:       state.zones.length,
+    HOSTS:             hostsInOrder.map(h => h.name),
+    HOST_EXPLOITS:     hostExploits,
+    HOST_DECOYS:       hostDecoys,
+    HOST_PRIORITY:     hostPriority,
+    CONNECTED_HOSTS:   connectedHosts,
+
+    EXPLOITS:          state.exploits,
+    DECOYS:            state.decoys,
+    EXPLOIT_OUTCOME:   state.exploitOutcomes,
+    EXPLOIT_DECOY_MAP: state.exploitDecoyMap,
+    REWARDED_EXPLOITS: rewardedExploits,
+
+    ZONE_CONNECTIONS:  zoneConnections,
+    ATTACK_PATHS:      attackPaths,
+  };
 }
 
 export function downloadJSON(data, filename = "cage2_config.json") {

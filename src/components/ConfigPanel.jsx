@@ -1,177 +1,195 @@
-// ─── Config Panel (mit Detection & Failure Rates) ───────────────────
-import { useState, useEffect } from "react";
 import { S } from "../styles/styles";
 
+const PROB_PRESETS = [0.5, 0.75, 0.9, 0.95, 1.0];
+
 export default function ConfigPanel({ state, setState }) {
-  const [newItem, setNewItem] = useState("");
-  const [addingTo, setAddingTo] = useState(null);
-  const [customDetection, setCustomDetection] = useState("");
-  const [customRemoveFail, setCustomRemoveFail] = useState("");
-  const [customRestoreFail, setCustomRestoreFail] = useState("");
 
-  // Initialize rates if not present in state
-  useEffect(() => {
-    if (state.exploitDetectionRate === undefined) {
-      setState(s => ({ ...s, exploitDetectionRate: 100 }));
-    }
-    if (state.removeActionFailRate === undefined) {
-      setState(s => ({ ...s, removeActionFailRate: 0 }));
-    }
-    if (state.restoreActionFailRate === undefined) {
-      setState(s => ({ ...s, restoreActionFailRate: 0 }));
-    }
-  }, [state, setState]);
+  // ── Helpers ────────────────────────────────────────────────────────
 
-  const addTo = (field) => {
-    if (!newItem.trim()) return;
-    setState(s => ({ ...s, [field]: [...s[field], newItem.trim()] }));
-    setNewItem("");
-    setAddingTo(null);
+  const addTo = (field, item) => {
+    if (!item.trim()) return;
+    setState(s => ({ ...s, [field]: [...s[field], item.trim()] }));
   };
 
   const removeFrom = (field, item) => {
     setState(s => ({ ...s, [field]: s[field].filter(x => x !== item) }));
   };
 
-  const renderList = (title, field, color) => (
-    <div style={S.section}>
-      <label style={S.label}>{title}</label>
-      <div style={{ ...S.row, marginTop: 4 }}>
-        {state[field].map(item => (
-          <span key={item} style={{ ...S.chip(true), borderColor: color, background: color + '18', color }}>
-            {item}
-            <span style={{ marginLeft: 4, cursor: 'pointer', opacity: 0.6 }} onClick={() => removeFrom(field, item)}>&times;</span>
-          </span>
-        ))}
-        {addingTo === field ? (
-          <span style={S.row}>
-            <input style={{ ...S.input, width: 80 }} value={newItem} onChange={e => setNewItem(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") addTo(field); if (e.key === "Escape") setAddingTo(null); }} autoFocus placeholder="Name..."/>
-            <button style={{ ...S.btn, ...S.btnSmall }} onClick={() => addTo(field)}>Add</button>
-          </span>
-        ) : (
-          <span style={{ ...S.chip(false), cursor: 'pointer' }} onClick={() => setAddingTo(field)}>+ Add</span>
-        )}
-      </div>
-    </div>
-  );
+  // ── Renderers ──────────────────────────────────────────────────────
 
-  const renderRateSelector = (title, field, options, color) => {
-    const currentValue = state[field] || (field === 'exploitDetectionRate' ? 100 : 0);
-    const [isCustom, setIsCustom] = useState(false);
-    const [customValue, setCustomValue] = useState(currentValue.toString());
-
-    const handlePresetClick = (value) => {
-      setIsCustom(false);
-      setState(s => ({ ...s, [field]: value }));
-    };
-
-    const handleCustomClick = () => {
-      setIsCustom(true);
-      const numValue = parseInt(customValue, 10);
-      if (!isNaN(numValue) && numValue >= 0 && numValue <= 100) {
-        setState(s => ({ ...s, [field]: numValue }));
-      }
-    };
-
-    const handleCustomChange = (e) => {
-      const val = e.target.value;
-      setCustomValue(val);
-      const numValue = parseInt(val, 10);
-      if (!isNaN(numValue) && numValue >= 0 && numValue <= 100) {
-        setState(s => ({ ...s, [field]: numValue }));
-      }
-    };
-
+  const renderList = (title, field, color) => {
+    let inputRef = null;
     return (
       <div style={S.section}>
         <label style={S.label}>{title}</label>
         <div style={{ ...S.row, marginTop: 4 }}>
-          {options.map(opt => (
-            <span
-              key={opt}
-              style={{
-                ...S.chip(currentValue === opt && !isCustom),
-                background: currentValue === opt && !isCustom ? color : 'var(--color-background-secondary)',
-                color: currentValue === opt && !isCustom ? '#fff' : 'var(--color-text-secondary)',
-                borderColor: currentValue === opt && !isCustom ? color : 'var(--color-border-tertiary)',
-                cursor: 'pointer',
-                fontWeight: 500,
-                minWidth: 45,
-                textAlign: 'center'
-              }}
-              onClick={() => handlePresetClick(opt)}
-            >
-              {opt}%
+          {(state[field] || []).map(item => (
+            <span key={item} style={{ ...S.chip(true), borderColor: color, background: color + '18', color }}>
+              {item}
+              <span style={{ marginLeft: 4, cursor: 'pointer', opacity: 0.6 }} onClick={() => removeFrom(field, item)}>&times;</span>
             </span>
           ))}
-          <span
-            style={{
-              ...S.chip(isCustom),
-              background: isCustom ? color : 'var(--color-background-secondary)',
-              color: isCustom ? '#fff' : 'var(--color-text-secondary)',
-              borderColor: isCustom ? color : 'var(--color-border-tertiary)',
-              cursor: 'pointer',
-              fontWeight: 500
-            }}
-            onClick={handleCustomClick}
-          >
-            Custom
-          </span>
-          {isCustom && (
-            <input
-              style={{ ...S.input, width: 80 }}
-              type="number"
-              min="0"
-              max="100"
-              value={customValue}
-              onChange={handleCustomChange}
-              onBlur={handleCustomClick}
-              placeholder="0-100"
-              autoFocus
-            />
-          )}
-        </div>
-        <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', marginTop: 4 }}>
-          Current: <span style={{ color, fontWeight: 500 }}>{currentValue}%</span>
+          <input
+            style={{ ...S.input, width: 90 }}
+            placeholder="+ Add..."
+            onKeyDown={e => { if (e.key === "Enter") { addTo(field, e.target.value); e.target.value = ""; } }}
+          />
         </div>
       </div>
     );
   };
 
-  const detectionOptions = [100, 95, 90, 85, 80];
-  const failOptions = [0, 5, 10, 15, 20, 25, 30];
+  const renderProbSelector = (title, field, color, description) => {
+    const value = state[field] ?? 1.0;
+    return (
+      <div style={S.section}>
+        <label style={S.label}>{title}</label>
+        {description && <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>{description}</div>}
+        <div style={{ ...S.row, marginTop: 4 }}>
+          {PROB_PRESETS.map(opt => (
+            <span key={opt}
+              style={{
+                ...S.chip(value === opt),
+                background: value === opt ? color : 'var(--color-background-secondary)',
+                color: value === opt ? '#fff' : 'var(--color-text-secondary)',
+                borderColor: value === opt ? color : 'var(--color-border-tertiary)',
+                cursor: 'pointer', fontWeight: 500, minWidth: 40, textAlign: 'center'
+              }}
+              onClick={() => setState(s => ({ ...s, [field]: opt }))}>
+              {opt}
+            </span>
+          ))}
+          <input
+            type="number" min="0" max="1" step="0.05"
+            style={{ ...S.input, width: 65 }}
+            value={value}
+            onChange={e => {
+              const v = parseFloat(e.target.value);
+              if (!isNaN(v) && v >= 0 && v <= 1) setState(s => ({ ...s, [field]: v }));
+            }}
+          />
+        </div>
+      </div>
+    );
+  };
+
+  const renderLockout = (title, field) => {
+    const lockout = state[field] || { red: {}, blue: {} };
+    return (
+      <div style={S.section}>
+        <label style={S.label}>{title}</label>
+        {['red', 'blue'].map(agent => (
+          <div key={agent} style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 10, fontWeight: 600, color: agent === 'red' ? '#E24B4A' : '#3B8BD4', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              {agent} agent
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {Object.entries(lockout[agent] || {}).map(([action, turns]) => (
+                <div key={action} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                  <span style={{ fontSize: 9, color: 'var(--color-text-tertiary)' }}>{action}</span>
+                  <input type="number" min="0" max="99"
+                    style={{ ...S.input, width: 44, textAlign: 'center', padding: '2px 4px', fontSize: 11 }}
+                    value={turns}
+                    onChange={e => setState(s => ({
+                      ...s,
+                      [field]: {
+                        ...s[field],
+                        [agent]: { ...s[field][agent], [action]: parseInt(e.target.value) || 0 }
+                      }
+                    }))}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderHostSelect = (title, field) => {
+    const hostId = state[field];
+    const hostName = state.hosts.find(h => h.id === hostId)?.name || "None";
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <span style={{ fontSize: 11, minWidth: 120, color: 'var(--color-text-secondary)' }}>{title}</span>
+        <select
+          style={{ ...S.select, flex: 1 }}
+          value={hostId || ""}
+          onChange={e => setState(s => ({ ...s, [field]: e.target.value || null }))}>
+          <option value="">None</option>
+          {state.hosts.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
+        </select>
+      </div>
+    );
+  };
+
+  const renderHostGroup = (title, field, color) => {
+    const group = state[field] || [];
+    return (
+      <div style={S.section}>
+        <label style={S.label}>{title}</label>
+        <div style={{ ...S.row, marginTop: 4, flexWrap: 'wrap' }}>
+          {state.hosts.map(h => {
+            const isActive = group.includes(h.id);
+            return (
+              <span key={h.id}
+                style={{
+                  ...S.chip(isActive),
+                  background: isActive ? color : 'var(--color-background-secondary)',
+                  color: isActive ? '#fff' : 'var(--color-text-secondary)',
+                  borderColor: isActive ? color : 'var(--color-border-tertiary)',
+                  cursor: 'pointer'
+                }}
+                onClick={() => setState(s => ({
+                  ...s,
+                  [field]: isActive
+                    ? (s[field] || []).filter(x => x !== h.id)
+                    : [...(s[field] || []), h.id]
+                }))}>
+                {h.name}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  // ── Render ─────────────────────────────────────────────────────────
 
   return (
-    <div style={S.panel}>
+    <div style={{ ...S.panel, maxWidth: 900, overflowY: 'auto' }}>
       <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 12, color: 'var(--color-text-primary)' }}>
         Environment configuration
       </div>
 
+      {/* ── Actions ── */}
       {renderList("Red actions", "redActions", "#E24B4A")}
       {renderList("Blue actions", "blueActions", "#3B8BD4")}
 
       <div style={S.divider}/>
 
+      {/* ── Services ── */}
       {renderList("Global exploits", "exploits", "#D85A30")}
       {renderList("Global decoys", "decoys", "#1D9E75")}
 
       <div style={S.divider}/>
 
+      {/* ── Exploit outcomes ── */}
       <div style={S.section}>
         <label style={S.label}>Exploit outcomes</label>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 6, marginTop: 4 }}>
-          {state.exploits.map(ex => (
+          {(state.exploits || []).map(ex => (
             <div key={ex} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 11, fontWeight: 500, minWidth: 60 }}>{ex}</span>
+              <span style={{ fontSize: 11, fontWeight: 500, minWidth: 64 }}>{ex}</span>
               <select
                 style={{ ...S.select, fontSize: 10, padding: '3px 6px' }}
-                value={state.exploitOutcomes[ex] || "user"}
+                value={state.exploitOutcomes?.[ex] || "user"}
                 onChange={e => setState(s => ({
                   ...s,
                   exploitOutcomes: { ...s.exploitOutcomes, [ex]: e.target.value }
-                }))}
-              >
+                }))}>
                 <option value="user">user</option>
                 <option value="root">root</option>
               </select>
@@ -182,33 +200,80 @@ export default function ConfigPanel({ state, setState }) {
 
       <div style={S.divider}/>
 
-      {renderRateSelector(
-        "Exploit Detection (Defender) %",
-        "exploitDetectionRate",
-        detectionOptions,
-        "#3B8BD4"
-      )}
-
-      {renderRateSelector(
-        "Remove Action Fail (Attacker) %",
-        "removeActionFailRate",
-        failOptions,
-        "#E24B4A"
-      )}
-
-      {renderRateSelector(
-        "Restore Action Fail (Attacker) %",
-        "restoreActionFailRate",
-        failOptions,
-        "#E24B4A"
-      )}
+      {/* ── Exploit → Decoy map ── */}
+      <div style={S.section}>
+        <label style={S.label}>Exploit → Decoy map</label>
+        <div style={{ display: 'grid', gap: 8, marginTop: 6 }}>
+          {(state.exploits || []).map(exploit => {
+            const mapped = state.exploitDecoyMap?.[exploit] || [];
+            return (
+              <div key={exploit} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11, fontWeight: 500, minWidth: 72, color: '#D85A30' }}>{exploit}</span>
+                <div style={{ ...S.row, flexWrap: 'wrap' }}>
+                  {(state.decoys || []).map(d => {
+                    const active = mapped.includes(d);
+                    return (
+                      <span key={d}
+                        style={{
+                          ...S.chip(active),
+                          background: active ? '#1D9E75' : 'var(--color-background-secondary)',
+                          color: active ? '#fff' : 'var(--color-text-secondary)',
+                          borderColor: active ? '#1D9E75' : 'var(--color-border-tertiary)',
+                          cursor: 'pointer'
+                        }}
+                        onClick={() => setState(s => ({
+                          ...s,
+                          exploitDecoyMap: {
+                            ...s.exploitDecoyMap,
+                            [exploit]: active
+                              ? (s.exploitDecoyMap?.[exploit] || []).filter(x => x !== d)
+                              : [...(s.exploitDecoyMap?.[exploit] || []), d]
+                          }
+                        }))}>
+                        {d}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       <div style={S.divider}/>
 
-      <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 8 }}>
-        <strong>Note:</strong> Detection rate affects how likely defender actions are to succeed.<br/>
-        Fail rates affect attacker's remove and restore actions.
+      {/* ── Numeric params ── */}
+      {renderProbSelector("Exploit priority (exploitPrio)", "exploitPrio", "#D85A30", "Probability that red chooses to exploit over other actions")}
+      {renderProbSelector("Exploit observability (exploitObs)", "exploitObs", "#3B8BD4", "Probability that blue observes a red exploit action")}
+      {renderProbSelector("Remove success rate (removeSuccess)", "removeSuccess", "#1D9E75", "Probability that blue's remove action succeeds")}
+      {renderProbSelector("Restore success rate (restoreSuccess)", "restoreSuccess", "#1D9E75", "Probability that blue's restore action succeeds")}
+
+      <div style={S.divider}/>
+
+      {/* ── Lockouts ── */}
+      {renderLockout("Agent lockout (turns per action)", "agentLockout")}
+      {renderLockout("Host lockout (turns per action)", "hostLockout")}
+
+      <div style={S.divider}/>
+
+      {/* ── Scenario roles ── */}
+      <div style={S.section}>
+        <label style={S.label}>Scenario roles</label>
+        <div style={{ marginTop: 8 }}>
+          {renderHostSelect("Target", "target")}
+          {renderHostSelect("Entry point", "entryPoint")}
+          {renderHostSelect("Target gateway", "targetGateway")}
+          {renderHostSelect("Red start host", "redStartHost")}
+        </div>
       </div>
+
+      <div style={S.divider}/>
+
+      {/* ── Host groups ── */}
+      {renderHostGroup("Defender hosts", "defenderHosts", "#3B8BD4")}
+      {renderHostGroup("Users", "users", "#7F77DD")}
+      {renderHostGroup("Green hosts", "greenHosts", "#1D9E75")}
     </div>
   );
 }

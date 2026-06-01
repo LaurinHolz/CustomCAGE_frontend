@@ -37,7 +37,7 @@ export default function App() {
   };
 
   const addZone = () => {
-    const id = uid("z");
+    const id = uid("zone");
     const colors = ["#3B8BD4","#1D9E75","#D85A30","#7F77DD","#D4537E","#888780"];
     const color = colors[state.zones.length % colors.length];
     setState(s => ({ ...s, zones: [...s.zones, { id, name: `Zone ${s.zones.length}`, color, x: 80 + (s.zones.length % 3) * 280, y: 30 + Math.floor(s.zones.length / 3) * 200 }] }));
@@ -61,11 +61,14 @@ export default function App() {
         id,
         name: `${type}${s.hosts.length}`,
         type,
-        zoneId: null, // Explicitly unassigned
+        zoneId: null,
         services: [],
         decoys: [],
-        x: startX + (col * 90), // Spread horizontally
-        y: startY + (row * 50), // Spread vertically
+        connectedHosts: [],
+        priority: 1,
+        rewardedExploits: [],
+        x: startX + (col * 90),
+        y: startY + (row * 50),
       }],
     }));
     showToast(`${type} added (unassigned)`);
@@ -85,7 +88,7 @@ export default function App() {
 
   const handleSendToServer = async () => {
   try {
-    const res = await fetch("http://your-server/api/config", {
+    const res = await fetch("http://127.0.0.1:9999", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(backendData),

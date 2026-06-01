@@ -135,6 +135,49 @@ export default function DetailSidebar({ state, setState, selectedItem }) {
         </div>
       </div>
 
+      {/* Priority */}
+      <div style={S.section}>
+        <label style={S.label}>Priority</label>
+        <input
+          type="number" min="1" max="10"
+          style={{ ...S.input, width: 60 }}
+          value={host.priority ?? 1}
+          onChange={e => setState(s => ({ ...s, hosts: s.hosts.map(h =>
+            h.id === host.id ? { ...h, priority: parseInt(e.target.value) || 1 } : h
+          )}))}
+        />
+      </div>
+
+      {/* Rewarded exploits — subset of host's active services */}
+      {host.services.length > 0 && (
+        <div style={S.section}>
+          <label style={S.label}>Rewarded exploits</label>
+          <div style={{ ...S.row, marginTop: 4 }}>
+            {host.services.map(ex => {
+              const rewards = host.rewardedExploits || [];
+              const isActive = rewards.includes(ex);
+              return (
+                <span key={ex}
+                  style={{
+                    ...S.chip(isActive),
+                    background: isActive ? '#D85A30' : 'var(--color-background-secondary)',
+                    color: isActive ? '#fff' : 'var(--color-text-secondary)',
+                    borderColor: isActive ? '#D85A30' : 'var(--color-border-tertiary)',
+                    cursor: 'pointer', transition: 'all .12s'
+                  }}
+                  onClick={() => setState(s => ({ ...s, hosts: s.hosts.map(h => {
+                    if (h.id !== host.id) return h;
+                    const r = h.rewardedExploits || [];
+                    return { ...h, rewardedExploits: r.includes(ex) ? r.filter(x => x !== ex) : [...r, ex] };
+                  })}))}>
+                  {ex}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div style={S.divider}/>
       <button style={{ ...S.btn, ...S.btnDanger, width: '100%' }} onClick={() => setState(s => ({
         ...s,
