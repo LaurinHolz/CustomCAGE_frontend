@@ -83,6 +83,20 @@ export default function App() {
     showToast("JSON downloaded");
   };
 
+  const handleSendToServer = async () => {
+  try {
+    const res = await fetch("http://your-server/api/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(backendData),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    showToast("Sent to server ✓");
+  } catch (err) {
+    showToast(`Failed: ${err.message}`);
+  }
+};
+
   return (
     <div style={S.app}>
       <div style={S.header}>
@@ -97,6 +111,7 @@ export default function App() {
             <option value="empty">Empty (Custom)</option>
           </select>
           <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleDownload}>Download JSON</button>
+          <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleSendToServer}>Send to server</button>
         </div>
       </div>
 
