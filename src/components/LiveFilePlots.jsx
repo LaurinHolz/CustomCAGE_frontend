@@ -120,10 +120,9 @@ function PlotCard({ plot, points }) {
   );
 }
 
-export default function LiveFilePlots() {
-  const [connected, setConnected] = useState(false);
-  const [series, setSeries]       = useState(createInitialSeries);
-  const [log, setLog]             = useState([]);
+export default function LiveFilePlots({ setConnected }) {
+  const [series, setSeries] = useState(createInitialSeries);
+  const [log, setLog]       = useState([]);
 
   useEffect(() => {
     const source = new EventSource(SSE_URL);
@@ -179,10 +178,6 @@ export default function LiveFilePlots() {
           <p style={styles.subtitle}>Metrics are streamed directly from the training server via SSE.</p>
         </div>
         <div style={styles.controls}>
-          <span style={styles.badge(connected)}>
-            <span style={styles.dot(connected)} />
-            {connected ? "Connected" : "Disconnected"}
-          </span>
           <span style={styles.pill}>{log.length} update{log.length === 1 ? "" : "s"}</span>
           <span style={styles.pill}>{totalPoints} point{totalPoints === 1 ? "" : "s"}</span>
           <button style={styles.button} onClick={clearAll}>Clear all</button>

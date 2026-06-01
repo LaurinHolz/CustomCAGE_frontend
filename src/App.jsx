@@ -20,6 +20,7 @@ export default function App() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [toast, setToast] = useState(null);
   const [showJSON, setShowJSON] = useState(false);
+  const [sseConnected, setSseConnected] = useState(false);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2000); };
 
@@ -106,6 +107,17 @@ export default function App() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={S.title}>Custom CAGE-2 environment</span>
           <span style={S.badge}>Builder</span>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            fontSize: 11, fontWeight: 500,
+            color: sseConnected ? '#1D9E75' : 'var(--color-text-tertiary)',
+          }}>
+            <span style={{
+              width: 7, height: 7, borderRadius: '50%',
+              background: sseConnected ? '#1D9E75' : 'var(--color-border-secondary)',
+            }}/>
+            {sseConnected ? 'Live' : 'Offline'}
+          </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <label style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>Preset:</label>
@@ -221,7 +233,7 @@ export default function App() {
       {tab === "overview" && <OverviewPanel state={state}/>}
       {tab === "config" && <ConfigPanel state={state} setState={setState}/>}
       <div style={{ display: tab === "live" ? "block" : "none" }}>
-        <LiveFilePlots />
+        <LiveFilePlots setConnected={setSseConnected} />
       </div>
 
 
