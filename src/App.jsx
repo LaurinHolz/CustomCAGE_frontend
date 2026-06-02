@@ -126,7 +126,7 @@ export default function App() {
             <option value="empty">Empty (Custom)</option>
           </select>
           <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleDownload}>Download JSON</button>
-          <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleSendToServer}>Send to server</button>
+          <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleSendToServer}>Train</button>
         </div>
       </div>
 
