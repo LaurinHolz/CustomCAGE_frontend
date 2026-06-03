@@ -1,53 +1,54 @@
-export function exportToBackendFormat(state) {
-  const hostsInOrder = state.hosts;
+import { buildNameTranslation } from "./translateNames";
 
-  // CONNECTED_HOSTS: for each host, list of target host names it can reach (from attackPaths)
-  const connectedHosts = hostsInOrder.map(host => {
+export function exportToBackendFormat(state) {
+  const { hostNames, zoneIds, hostsOrdered } = buildNameTranslation(state);
+  const tr  = name => hostNames[name] ?? name;
+  const trZ = id   => zoneIds[id]    ?? id;
+
+  // CONNECTED_HOSTS: per host, which hosts it can reach (derived from attack paths)
+  const connectedHosts = hostsOrdered.map(host => {
     const paths = state.attackPaths.filter(p => p.from === host.id);
     if (paths.length === 0) return null;
-    const targets = paths.map(p => state.hosts.find(h => h.id === p.to)?.name).filter(Boolean);
+    const targets = paths
+      .map(p => { const t = state.hosts.find(h => h.id === p.to); return t ? tr(t.name) : null; })
+      .filter(Boolean);
     return targets.length > 0 ? targets : null;
   });
 
-  // HOST_EXPLOITS, HOST_DECOYS, HOST_PRIORITY, REWARDED_EXPLOITS per host
-  const hostExploits       = hostsInOrder.map(h => [...h.services]);
-  const hostDecoys         = hostsInOrder.map(h => [...h.decoys]);
-  const hostPriority       = hostsInOrder.map(h => h.priority ?? 1);
-  const rewardedExploits   = hostsInOrder.map(h => [...(h.rewardedExploits || [])]);
+  const hostExploits     = hostsOrdered.map(h => [...h.services]);
+  const hostDecoys       = hostsOrdered.map(h => [...h.decoys]);
+  const hostPriority     = hostsOrdered.map(h => h.priority ?? 1);
+  const rewardedExploits = hostsOrdered.map(h => [...(h.rewardedExploits || [])]);
 
-  // ATTACK_PATHS: [[from_name, to_name], ...]
   const attackPaths = state.attackPaths.map(c => {
     const f = state.hosts.find(h => h.id === c.from);
     const t = state.hosts.find(h => h.id === c.to);
-    return f && t ? [f.name, t.name] : null;
+    return f && t ? [tr(f.name), tr(t.name)] : null;
   }).filter(Boolean);
 
-  // ZONE_CONNECTIONS: [[from_zone_name, to_zone_name], ...]
   const zoneConnections = state.zoneConnections.map(c => {
     const fromZone = state.zones.find(z => z.id === c.from);
     const toZone   = state.zones.find(z => z.id === c.to);
     return fromZone && toZone ? [fromZone.name, toZone.name] : null;
   }).filter(Boolean);
 
-  // SUBNETS: { zoneId: [hostName, ...] }
   const subnets = {};
   state.zones.forEach(z => {
-    subnets[z.id] = hostsInOrder.filter(h => h.zoneId === z.id).map(h => h.name);
+    subnets[trZ(z.id)] = hostsOrdered.filter(h => h.zoneId === z.id).map(h => tr(h.name));
   });
 
-  // Scenario role host IDs → names
-  const hostName = (id) => state.hosts.find(h => h.id === id)?.name ?? null;
-  const hostNames = (ids) => (ids || []).map(id => hostName(id)).filter(Boolean);
+  const nameById  = id  => { const h = state.hosts.find(h => h.id === id); return h ? tr(h.name) : null; };
+  const nameByIds = ids => (ids || []).map(id => nameById(id)).filter(Boolean);
 
   return {
     SUBNETS:           subnets,
-    TARGET:            hostName(state.target),
-    ENTRY_POINT:       hostName(state.entryPoint),
-    TARGET_GATEWAY:    hostName(state.targetGateway),
-    RED_START_HOST:    hostName(state.redStartHost),
-    DEFENDER_HOSTS:    hostNames(state.defenderHosts),
-    USERS:             hostNames(state.users),
-    GREEN_HOSTS:       hostNames(state.greenHosts),
+    TARGET:            nameById(state.target),
+    ENTRY_POINT:       nameById(state.entryPoint),
+    TARGET_GATEWAY:    nameById(state.targetGateway),
+    RED_START_HOST:    nameById(state.redStartHost),
+    DEFENDER_HOSTS:    nameByIds(state.defenderHosts),
+    USERS:             nameByIds(state.users),
+    GREEN_HOSTS:       nameByIds(state.greenHosts),
 
     EXPLOIT_PRIO:      state.exploitPrio  ?? 0.75,
     EXPLOIT_OBS:       state.exploitObs   ?? 0.95,
@@ -61,7 +62,7 @@ export function exportToBackendFormat(state) {
     HOST_LOCKOUT:      state.hostLockout,
 
     NUM_SUBNETS:       state.zones.length,
-    HOSTS:             hostsInOrder.map(h => h.name),
+    HOSTS:             hostsOrdered.map(h => tr(h.name)),
     HOST_EXPLOITS:     hostExploits,
     HOST_DECOYS:       hostDecoys,
     HOST_PRIORITY:     hostPriority,
