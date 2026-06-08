@@ -21,6 +21,7 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [showJSON, setShowJSON] = useState(false);
   const [sseConnected, setSseConnected] = useState(false);
+  const [visualizerOn, setVisualizerOn] = useState(false);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2000); };
 
@@ -101,6 +102,22 @@ export default function App() {
   }
 };
 
+  const handleToggleVisualizer = async () => {
+    const enabled = !visualizerOn;
+    try {
+      const res = await fetch("http://127.0.0.1:9999/visualize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setVisualizerOn(enabled);
+      showToast(enabled ? "Visualizer opened" : "Visualizer closed");
+    } catch (err) {
+      showToast(`Failed: ${err.message}`);
+    }
+  };
+
   return (
     <div style={S.app}>
       <div style={S.header}>
@@ -127,6 +144,12 @@ export default function App() {
           </select>
           <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleDownload}>Download JSON</button>
           <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleSendToServer}>Train</button>
+          <button
+            style={{ ...S.btn, ...(visualizerOn ? S.btnPrimary : {}) }}
+            onClick={handleToggleVisualizer}
+          >
+            {visualizerOn ? "Hide Visualizer" : "Show Visualizer"}
+          </button>
         </div>
       </div>
 
