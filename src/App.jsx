@@ -10,6 +10,7 @@ import DetailSidebar from "./components/DetailSidebar";
 import OverviewPanel from "./components/OverviewPanel";
 import ConfigPanel from "./components/ConfigPanel";
 import LiveFilePlots from "./components/LiveFilePlots";
+import ToggleSwitch from "./components/ToggleSwitch";
 
 // ─── Main App ─────────────────────────────────────────────────────
 export default function App() {
@@ -144,12 +145,11 @@ export default function App() {
           </select>
           <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleDownload}>Download JSON</button>
           <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleSendToServer}>Train</button>
-          <button
-            style={{ ...S.btn, ...(visualizerOn ? S.btnPrimary : {}) }}
-            onClick={handleToggleVisualizer}
-          >
-            {visualizerOn ? "Hide Visualizer" : "Show Visualizer"}
-          </button>
+          <ToggleSwitch
+            checked={visualizerOn}
+            onToggle={handleToggleVisualizer}
+            label="Visualizer"
+          />
         </div>
       </div>
 
