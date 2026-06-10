@@ -1,4 +1,4 @@
-// Acceptable ranges for watchdog metrics (see mini_CAGE/data/watchdog/*.json).
+// Acceptable ranges for watchdog metrics (see mini_CAGE/data/evaluation/*.json).
 // In the Evaluation table, a field's average is shown with a green background
 // when it falls within [min, max], and red otherwise. Fields not listed here
 // are left unstyled (no clear "good" direction to compare against).

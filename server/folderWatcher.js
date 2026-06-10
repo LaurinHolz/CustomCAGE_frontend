@@ -6,7 +6,7 @@ import fs from "fs/promises";
 import path from "path";
 import cors from "cors";
 
-const WATCH_FOLDER = "../data/watchdog";
+const WATCH_FOLDER = "../data/training";
 
 const app = express();
 app.use(cors());

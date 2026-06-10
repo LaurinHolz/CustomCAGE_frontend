@@ -152,7 +152,7 @@ export default function WatchdogAveragesTable() {
       <div style={styles.header}>
         <div>
           <h2 style={styles.title}>Evaluation averages</h2>
-          <p style={styles.subtitle}>Mean of each field across every snapshot in data/watchdog/</p>
+          <p style={styles.subtitle}>Mean of each field across every snapshot in data/evaluation/</p>
         </div>
         <div style={styles.controls}>
           <span style={styles.pill}>{fileCount} file{fileCount === 1 ? "" : "s"}</span>
