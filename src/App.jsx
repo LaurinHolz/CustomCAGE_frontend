@@ -11,6 +11,7 @@ import OverviewPanel from "./components/OverviewPanel";
 import ConfigPanel from "./components/ConfigPanel";
 import LiveFilePlots from "./components/LiveFilePlots";
 import WatchdogAveragesTable from "./components/WatchdogAveragesTable";
+import EvaluateModal from "./components/EvaluateModal";
 import ToggleSwitch from "./components/ToggleSwitch";
 
 // ─── Main App ─────────────────────────────────────────────────────
@@ -24,6 +25,7 @@ export default function App() {
   const [showJSON, setShowJSON] = useState(false);
   const [sseConnected, setSseConnected] = useState(false);
   const [visualizerOn, setVisualizerOn] = useState(false);
+  const [evalModalOpen, setEvalModalOpen] = useState(false);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2000); };
 
@@ -104,14 +106,22 @@ export default function App() {
   }
 };
 
-  const handleEvaluate = async () => {
+  const handleEvaluate = () => setEvalModalOpen(true);
+
+  const runEvaluate = async ({ ckptPath, numEpisodes, maxTimesteps }) => {
     try {
-      const res = await fetch("http://127.0.0.1:9999/evaluate", {
+      const params = new URLSearchParams();
+      if (ckptPath) params.set("ckpt_path", ckptPath);
+      params.set("num_episodes", String(numEpisodes));
+      params.set("max_timesteps", String(maxTimesteps));
+
+      const res = await fetch(`http://127.0.0.1:9999/evaluate?${params.toString()}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(backendData),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setEvalModalOpen(false);
       showToast("Evaluation started ✓");
     } catch (err) {
       showToast(`Failed: ${err.message}`);
@@ -279,6 +289,12 @@ export default function App() {
 
 
       {toast && <div style={S.toast}>{toast}</div>}
+      {evalModalOpen && (
+        <EvaluateModal
+          onClose={() => setEvalModalOpen(false)}
+          onRun={runEvaluate}
+        />
+      )}
     </div>
   );
 }
