@@ -10,6 +10,7 @@ import DetailSidebar from "./components/DetailSidebar";
 import OverviewPanel from "./components/OverviewPanel";
 import ConfigPanel from "./components/ConfigPanel";
 import LiveFilePlots from "./components/LiveFilePlots";
+import WatchdogAveragesTable from "./components/WatchdogAveragesTable";
 import ToggleSwitch from "./components/ToggleSwitch";
 
 // ─── Main App ─────────────────────────────────────────────────────
@@ -103,6 +104,20 @@ export default function App() {
   }
 };
 
+  const handleEvaluate = async () => {
+    try {
+      const res = await fetch("http://127.0.0.1:9999/evaluate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(backendData),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      showToast("Evaluation started ✓");
+    } catch (err) {
+      showToast(`Failed: ${err.message}`);
+    }
+  };
+
   const handleToggleVisualizer = async () => {
     const enabled = !visualizerOn;
     try {
@@ -145,6 +160,7 @@ export default function App() {
           </select>
           <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleDownload}>Download JSON</button>
           <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleSendToServer}>Train</button>
+          <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleEvaluate}>Evaluate</button>
           <ToggleSwitch
             checked={visualizerOn}
             onToggle={handleToggleVisualizer}
@@ -158,7 +174,8 @@ export default function App() {
         ["attack","Attack graph"],
         ["overview","Overview"],
         ["config","Config"],
-        ["live", "Live plots"]
+        ["live", "Live plots"],
+        ["evaluation", "Evaluation"]
       ].map(([k,v]) => (
           <button key={k} style={S.tab(tab === k)} onClick={() => { setTab(k); setMode("select"); setConnectFrom(null); }}>{v}</button>
         ))}
@@ -258,6 +275,7 @@ export default function App() {
       <div style={{ display: tab === "live" ? "block" : "none" }}>
         <LiveFilePlots setConnected={setSseConnected} />
       </div>
+      {tab === "evaluation" && <WatchdogAveragesTable />}
 
 
       {toast && <div style={S.toast}>{toast}</div>}
