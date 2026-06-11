@@ -5,21 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "watch-folder": "node server/folderWatcher.js",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
     "chart.js": "^4.5.1",
-    "chokidar": "^5.0.0",
-    "cors": "^2.8.6",
-    "express": "^5.2.1",
     "react": "^19.2.4",
     "react-chartjs-2": "^5.3.1",
-    "react-dom": "^19.2.4",
-    "socket.io": "^4.8.3",
-    "socket.io-client": "^4.8.3"
+    "react-dom": "^19.2.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

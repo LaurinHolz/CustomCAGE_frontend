@@ -1,12 +1,31 @@
 import { useCallback, useEffect, useState } from "react";
+import {
+  Chart as ChartJS,
+  ArcElement,
+  Tooltip,
+  Legend,
+} from "chart.js";
+import { Pie } from "react-chartjs-2";
 import { WATCHDOG_BOUNDS } from "../constants/watchdogBounds";
+
+ChartJS.register(ArcElement, Tooltip, Legend);
 
 const AVERAGES_URL = "http://127.0.0.1:9999/watchdog-averages";
 const POLL_MS = 10000;
 
+const TEXT_PRIMARY = "var(--color-text-primary, #f5f5f5)";
+const TEXT_SECONDARY = "var(--color-text-secondary, rgba(255,255,255,0.55))";
+
+// A fixed height for every card (table or pie) so the grid reads as a tidy
+// set of equally-sized tiles rather than a jumble of different heights.
+const CARD_HEIGHT = 360;
+
+const PIE_COLORS = ["#3B8BD4", "#1D9E75", "#E24B4A", "#E0A458", "#C879E0", "#4EC3C9", "#8A8A93"];
+
 // Fields are grouped for readability; anything returned by the backend that
 // isn't listed here still shows up, under "Other metrics" — so new watchdog
-// fields are never silently dropped.
+// fields are never silently dropped. Groups with chart: "pie" render as a
+// pie chart instead of a table.
 const FIELD_GROUPS = [
   {
     title: "Core metrics",
@@ -15,11 +34,13 @@ const FIELD_GROUPS = [
   {
     title: "Red action distribution",
     prefix: "red_action_frac_",
+    chart: "pie",
     fields: ["red_action_frac_sleep", "red_action_frac_remote", "red_action_frac_network", "red_action_frac_exploit", "red_action_frac_escalate", "red_action_frac_impact"],
   },
   {
     title: "Blue action distribution",
     prefix: "blue_action_frac_",
+    chart: "pie",
     fields: ["blue_action_frac_sleep", "blue_action_frac_analyse", "blue_action_frac_decoy", "blue_action_frac_remove", "blue_action_frac_restore"],
   },
   {
@@ -37,18 +58,20 @@ const FIELD_GROUPS = [
 const HIDDEN_FIELDS = new Set(["step"]);
 
 const styles = {
-  page: { padding: 20, minHeight: "100%", color: "var(--color-text-primary, #f5f5f5)" },
+  page: { padding: 20, minHeight: "100%", color: TEXT_PRIMARY },
   header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, marginBottom: 24, flexWrap: "wrap" },
-  title: { margin: 0, fontSize: 22, fontWeight: 700, color: "var(--color-text-primary, #f5f5f5)", letterSpacing: "-0.3px" },
-  subtitle: { margin: "6px 0 0 0", fontSize: 13, color: "var(--color-text-secondary, rgba(255,255,255,0.55))" },
+  title: { margin: 0, fontSize: 22, fontWeight: 700, color: TEXT_PRIMARY, letterSpacing: "-0.3px" },
+  subtitle: { margin: "6px 0 0 0", fontSize: 13, color: TEXT_SECONDARY },
   controls: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" },
   pill: { borderRadius: 999, padding: "7px 12px", fontSize: 12, fontWeight: 700, background: "rgba(255,255,255,0.06)", color: "var(--color-text-secondary, rgba(255,255,255,0.65))", border: "1px solid rgba(255,255,255,0.1)" },
-  button: { border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.055)", color: "var(--color-text-primary, #f5f5f5)", borderRadius: 9, padding: "7px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", transition: "background .15s, border-color .15s" },
+  button: { border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.055)", color: TEXT_PRIMARY, borderRadius: 9, padding: "7px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", transition: "background .15s, border-color .15s" },
   grid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 16, alignItems: "start" },
-  card: { border: "1px solid rgba(255,255,255,0.09)", borderRadius: 16, background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))", boxShadow: "0 18px 50px rgba(0,0,0,0.22)", overflow: "hidden" },
+  card: { height: CARD_HEIGHT, display: "flex", flexDirection: "column", border: "1px solid rgba(255,255,255,0.09)", borderRadius: 16, background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))", boxShadow: "0 18px 50px rgba(0,0,0,0.22)", overflow: "hidden" },
   cardTitle: { margin: 0, padding: "14px 18px", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-secondary, rgba(255,255,255,0.5))", borderBottom: "1px solid rgba(255,255,255,0.07)" },
+  cardBody: { flex: 1, minHeight: 0, overflowY: "auto" },
+  pieBody: { flex: 1, minHeight: 0, padding: "12px 16px", display: "flex" },
   table: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
-  td: { padding: "10px 18px", color: "var(--color-text-primary, #f5f5f5)", transition: "background .12s" },
+  td: { padding: "10px 18px", color: TEXT_PRIMARY, transition: "background .12s" },
   tdLabel: { fontWeight: 500, color: "var(--color-text-secondary, rgba(255,255,255,0.78))" },
   tdNum: { textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 700, fontSize: 14, fontFamily: "var(--font-mono, ui-monospace, monospace)" },
   tdStatus: { width: 0, textAlign: "right", whiteSpace: "nowrap" },
@@ -107,6 +130,34 @@ function MetricRow({ rowKey, label, value, field, hovered, onHover, idx }) {
   );
 }
 
+function DistributionPie({ fields, prefix, averages }) {
+  const data = {
+    labels: fields.map((f) => fieldLabel(f, prefix)),
+    datasets: [{
+      data: fields.map((f) => averages[f] ?? 0),
+      backgroundColor: PIE_COLORS,
+      borderColor: "rgba(17,18,23,0.9)",
+      borderWidth: 2,
+    }],
+  };
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: "right",
+        labels: { color: TEXT_SECONDARY, boxWidth: 12, padding: 10, font: { size: 11 } },
+      },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => `${ctx.label}: ${(ctx.parsed * 100).toFixed(1)}%`,
+        },
+      },
+    },
+  };
+  return <Pie data={data} options={options} />;
+}
+
 export default function WatchdogAveragesTable() {
   const [averages, setAverages] = useState(null);
   const [fileCount, setFileCount] = useState(0);
@@ -141,7 +192,7 @@ export default function WatchdogAveragesTable() {
     for (const group of FIELD_GROUPS) {
       const rows = group.fields.filter((f) => f in averages);
       rows.forEach((f) => seen.add(f));
-      if (rows.length > 0) groups.push({ title: group.title, prefix: group.prefix, fields: rows });
+      if (rows.length > 0) groups.push({ title: group.title, prefix: group.prefix, chart: group.chart, fields: rows });
     }
     const leftover = Object.keys(averages).filter((k) => !seen.has(k));
     if (leftover.length > 0) groups.push({ title: "Other metrics", fields: leftover });
@@ -174,25 +225,33 @@ export default function WatchdogAveragesTable() {
           {groups.map((group) => (
             <div key={group.title} style={styles.card}>
               <h3 style={styles.cardTitle}>{group.title}</h3>
-              <table style={styles.table}>
-                <tbody>
-                  {group.fields.map((field, idx) => {
-                    const rowKey = `${group.title}:${field}`;
-                    return (
-                      <MetricRow
-                        key={field}
-                        rowKey={rowKey}
-                        idx={idx}
-                        field={field}
-                        label={fieldLabel(field, group.prefix)}
-                        value={averages[field]}
-                        hovered={hovered === rowKey}
-                        onHover={setHovered}
-                      />
-                    );
-                  })}
-                </tbody>
-              </table>
+              {group.chart === "pie" ? (
+                <div style={styles.pieBody}>
+                  <DistributionPie fields={group.fields} prefix={group.prefix} averages={averages} />
+                </div>
+              ) : (
+                <div style={styles.cardBody}>
+                  <table style={styles.table}>
+                    <tbody>
+                      {group.fields.map((field, idx) => {
+                        const rowKey = `${group.title}:${field}`;
+                        return (
+                          <MetricRow
+                            key={field}
+                            rowKey={rowKey}
+                            idx={idx}
+                            field={field}
+                            label={fieldLabel(field, group.prefix)}
+                            value={averages[field]}
+                            hovered={hovered === rowKey}
+                            onHover={setHovered}
+                          />
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           ))}
         </div>
