@@ -11,6 +11,7 @@ import OverviewPanel from "./components/OverviewPanel";
 import ConfigPanel from "./components/ConfigPanel";
 import LiveFilePlots from "./components/LiveFilePlots";
 import WatchdogAveragesTable from "./components/WatchdogAveragesTable";
+import VerificationTree from "./components/VerificationTree";
 import EvaluateModal from "./components/EvaluateModal";
 import ToggleSwitch from "./components/ToggleSwitch";
 
@@ -26,6 +27,7 @@ export default function App() {
   const [sseConnected, setSseConnected] = useState(false);
   const [visualizerOn, setVisualizerOn] = useState(false);
   const [evalModalOpen, setEvalModalOpen] = useState(false);
+  const [verifySignal, setVerifySignal] = useState(0);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2000); };
 
@@ -108,6 +110,11 @@ export default function App() {
 
   const handleEvaluate = () => setEvalModalOpen(true);
 
+  const handleVerify = () => {
+    setTab("verification");
+    setVerifySignal((n) => n + 1);
+  };
+
   const runEvaluate = async ({ ckptPath, numEpisodes, maxTimesteps }) => {
     try {
       const params = new URLSearchParams();
@@ -171,6 +178,7 @@ export default function App() {
           <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleDownload}>Download JSON</button>
           <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleSendToServer}>Train</button>
           <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleEvaluate}>Evaluate</button>
+          <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleVerify}>Verify</button>
           <ToggleSwitch
             checked={visualizerOn}
             onToggle={handleToggleVisualizer}
@@ -185,7 +193,8 @@ export default function App() {
         ["overview","Overview"],
         ["config","Config"],
         ["live", "Live plots"],
-        ["evaluation", "Evaluation"]
+        ["evaluation", "Evaluation"],
+        ["verification", "Verification Tree"]
       ].map(([k,v]) => (
           <button key={k} style={S.tab(tab === k)} onClick={() => { setTab(k); setMode("select"); setConnectFrom(null); }}>{v}</button>
         ))}
@@ -286,6 +295,9 @@ export default function App() {
         <LiveFilePlots setConnected={setSseConnected} />
       </div>
       {tab === "evaluation" && <WatchdogAveragesTable />}
+      <div style={{ display: tab === "verification" ? "block" : "none" }}>
+        <VerificationTree startSignal={verifySignal} />
+      </div>
 
 
       {toast && <div style={S.toast}>{toast}</div>}
