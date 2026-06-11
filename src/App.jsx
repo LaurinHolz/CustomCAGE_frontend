@@ -110,9 +110,20 @@ export default function App() {
 
   const handleEvaluate = () => setEvalModalOpen(true);
 
-  const handleVerify = () => {
+  const handleVerify = async () => {
     setTab("verification");
-    setVerifySignal((n) => n + 1);
+    try {
+      const res = await fetch("http://127.0.0.1:9999/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(backendData),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setVerifySignal((n) => n + 1);
+      showToast("Verification started ✓");
+    } catch (err) {
+      showToast(`Failed: ${err.message}`);
+    }
   };
 
   const runEvaluate = async ({ ckptPath, numEpisodes, maxTimesteps }) => {
