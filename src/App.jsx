@@ -12,8 +12,16 @@ import ConfigPanel from "./components/ConfigPanel";
 import LiveFilePlots from "./components/LiveFilePlots";
 import WatchdogAveragesTable from "./components/WatchdogAveragesTable";
 import VerificationTree from "./components/VerificationTree";
+import VerificationProperties from "./components/VerificationProperties";
+import VerificationResults from "./components/VerificationResults";
 import EvaluateModal from "./components/EvaluateModal";
 import ToggleSwitch from "./components/ToggleSwitch";
+
+const VERIFICATION_OPTIONS = [
+  { key: "bfs", label: "BFS" },
+  { key: "properties", label: "Properties" },
+  { key: "results", label: "Results" },
+];
 
 // ─── Main App ─────────────────────────────────────────────────────
 export default function App() {
@@ -28,6 +36,20 @@ export default function App() {
   const [visualizerOn, setVisualizerOn] = useState(false);
   const [evalModalOpen, setEvalModalOpen] = useState(false);
   const [verifySignal, setVerifySignal] = useState(0);
+  const [verificationView, setVerificationView] = useState("bfs");
+  const [verifMenuOpen, setVerifMenuOpen] = useState(false);
+  const verifMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (!verifMenuOpen) return;
+    const onDocClick = (e) => {
+      if (verifMenuRef.current && !verifMenuRef.current.contains(e.target)) {
+        setVerifMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [verifMenuOpen]);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2000); };
 
@@ -112,6 +134,7 @@ export default function App() {
 
   const handleVerify = async () => {
     setTab("verification");
+    setVerificationView("bfs");
     try {
       const res = await fetch("http://127.0.0.1:9999/verify", {
         method: "POST",
@@ -205,10 +228,63 @@ export default function App() {
         ["config","Config"],
         ["live", "Live plots"],
         ["evaluation", "Evaluation"],
-        ["verification", "Verification Tree"]
       ].map(([k,v]) => (
           <button key={k} style={S.tab(tab === k)} onClick={() => { setTab(k); setMode("select"); setConnectFrom(null); }}>{v}</button>
         ))}
+        <div ref={verifMenuRef} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+          <button
+            style={{ ...S.tab(tab === "verification"), display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            onClick={() => setVerifMenuOpen(o => !o)}
+          >
+            Verification
+            <span style={{
+              display: 'inline-block', fontSize: 9, lineHeight: 1,
+              transform: verifMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+              transition: 'transform .15s',
+            }}>▾</span>
+          </button>
+
+          {verifMenuOpen && (
+            <div style={{
+              position: 'absolute', top: 'calc(100% + 6px)', right: 0, minWidth: 160,
+              background: '#1c1c22',
+              border: '1px solid rgba(255,255,255,0.14)',
+              borderRadius: 12,
+              boxShadow: '0 16px 40px rgba(0,0,0,0.55)',
+              padding: 6, zIndex: 20,
+              display: 'flex', flexDirection: 'column', gap: 2,
+            }}>
+              {VERIFICATION_OPTIONS.map(opt => {
+                const active = tab === "verification" && verificationView === opt.key;
+                return (
+                  <button
+                    key={opt.key}
+                    style={{
+                      fontSize: 12, padding: '9px 12px', textAlign: 'left',
+                      border: 'none', borderRadius: 8,
+                      cursor: 'pointer', fontFamily: 'inherit',
+                      fontWeight: active ? 600 : 400,
+                      background: active ? 'rgba(29,158,117,0.22)' : 'transparent',
+                      color: active ? '#3FE0A8' : '#f5f5f5',
+                      transition: 'background .12s, color .12s',
+                    }}
+                    onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; }}
+                    onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+                    onClick={() => {
+                      setTab("verification");
+                      setVerificationView(opt.key);
+                      setVerifMenuOpen(false);
+                      setMode("select");
+                      setConnectFrom(null);
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {tab === "topology" && (
@@ -307,7 +383,15 @@ export default function App() {
       </div>
       {tab === "evaluation" && <WatchdogAveragesTable />}
       <div style={{ display: tab === "verification" ? "block" : "none" }}>
-        <VerificationTree startSignal={verifySignal} />
+        <div style={{ display: verificationView === "bfs" ? "block" : "none" }}>
+          <VerificationTree startSignal={verifySignal} />
+        </div>
+        <div style={{ display: verificationView === "properties" ? "block" : "none" }}>
+          <VerificationProperties />
+        </div>
+        <div style={{ display: verificationView === "results" ? "block" : "none" }}>
+          <VerificationResults />
+        </div>
       </div>
 
 
