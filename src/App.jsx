@@ -189,16 +189,15 @@ export default function App() {
     <div style={S.app}>
       <div style={S.header}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={S.title}>Custom CAGE-2 environment</span>
-          <span style={S.badge}>Builder</span>
+          <span style={S.title}>AEGIS</span>
           <span style={{
             display: 'inline-flex', alignItems: 'center', gap: 5,
             fontSize: 11, fontWeight: 500,
-            color: sseConnected ? '#1D9E75' : 'var(--color-text-tertiary)',
+            color: sseConnected ? '#1D9E75' : '#E24B4A',
           }}>
             <span style={{
               width: 7, height: 7, borderRadius: '50%',
-              background: sseConnected ? '#1D9E75' : 'var(--color-border-secondary)',
+              background: sseConnected ? '#1D9E75' : '#E24B4A',
             }}/>
             {sseConnected ? 'Live' : 'Offline'}
           </span>
