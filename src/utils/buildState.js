@@ -124,6 +124,14 @@ export function buildStateFromFlat({
     zoneConnections.forEach(c => { c.from   = idRemap.get(c.from)   ?? c.from; c.to = idRemap.get(c.to) ?? c.to; });
   }
 
+  // ── 5b. Re-anchor zone boxes to their new positional slot, so each zone's
+  //        label/background lines up with the hosts assigned to it ────────
+  zones.forEach(z => {
+    const idx = Number(z.id.replace("zone", ""));
+    z.x = 60 + idx * 280;
+    z.y = 30;
+  });
+
   // ── 6. Infer scenario roles ───────────────────────────────────────────────
   const redStartHost = hosts.find(h => h.name === redStart);
   const targetHost   = hosts.find(h => h.name === target);

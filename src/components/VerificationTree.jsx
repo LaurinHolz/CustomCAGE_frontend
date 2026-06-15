@@ -198,19 +198,6 @@ export default function VerificationTree({ startSignal = 0 }) {
     }
   }, []);
 
-  // Initial load: show whatever tree already exists (no animation).
-  useEffect(() => {
-    let cancelled = false;
-    fetch(TREE_URL)
-      .then((r) => r.json())
-      .then((data) => {
-        if (cancelled || !data.tree) return;
-        applyTree(data, false);
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [applyTree]);
-
   // ── Build run (triggered by the Verify button via startSignal) ─────────────
   const runRef = useRef(false);
   useEffect(() => {
