@@ -14,6 +14,8 @@ import WatchdogAveragesTable from "./components/WatchdogAveragesTable";
 import VerificationTree from "./components/VerificationTree";
 import EvaluateModal from "./components/EvaluateModal";
 import ToggleSwitch from "./components/ToggleSwitch";
+import VerificationProperties from "./components/VerificationProperties";
+import VerificationResults from "./components/VerificationResults";
 
 // ─── Main App ─────────────────────────────────────────────────────
 export default function App() {
@@ -28,6 +30,7 @@ export default function App() {
   const [visualizerOn, setVisualizerOn] = useState(false);
   const [evalModalOpen, setEvalModalOpen] = useState(false);
   const [verifySignal, setVerifySignal] = useState(0);
+  const [verificationMenuOpen, setVerificationMenuOpen] = useState(false);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2000); };
 
@@ -111,7 +114,7 @@ export default function App() {
   const handleEvaluate = () => setEvalModalOpen(true);
 
   const handleVerify = async () => {
-    setTab("verification");
+    setTab("verification-bfs");
     try {
       const res = await fetch("http://127.0.0.1:9999/verify", {
         method: "POST",
@@ -200,15 +203,79 @@ export default function App() {
 
       <div style={S.tabs}>
         {[["topology","Topology"],
-        ["attack","Attack graph"],
-        ["overview","Overview"],
-        ["config","Config"],
-        ["live", "Live plots"],
-        ["evaluation", "Evaluation"],
-        ["verification", "Verification Tree"]
-      ].map(([k,v]) => (
-          <button key={k} style={S.tab(tab === k)} onClick={() => { setTab(k); setMode("select"); setConnectFrom(null); }}>{v}</button>
+          ["attack","Attack graph"],
+          ["overview","Overview"],
+          ["config","Config"],
+          ["live", "Live plots"],
+          ["evaluation", "Evaluation"]
+        ].map(([k,v]) => (
+          <button
+            key={k}
+            style={S.tab(tab === k)}
+            onClick={() => {
+              setTab(k);
+              setMode("select");
+              setConnectFrom(null);
+            }}
+          >
+            {v}
+          </button>
         ))}
+
+        <div
+          style={{ position: "relative", display: "inline-block" }}
+          onMouseEnter={() => setVerificationMenuOpen(true)}
+          onMouseLeave={() => setVerificationMenuOpen(false)}
+        >
+          <button
+            style={S.tab(tab.startsWith("verification"))}
+            onClick={() => setTab("verification-bfs")}
+          >
+            Verification
+          </button>
+
+          {verificationMenuOpen && (
+            <div
+              style={{
+                position: "absolute",
+                top: "100%",
+                left: 0,
+                minWidth: 160,
+                background: "var(--color-surface-primary)",
+                border: "1px solid var(--color-border-primary)",
+                borderRadius: 8,
+                boxShadow: "0 6px 16px rgba(0,0,0,0.15)",
+                zIndex: 1000,
+                padding: 4,
+              }}
+            >
+              {[
+                ["verification-config", "Config"],
+                ["verification-bfs", "BFS"],
+                ["verification-properties", "Properties"],
+                ["verification-results", "Results"],
+              ].map(([k, v]) => (
+                <button
+                  key={k}
+                  style={{
+                    ...S.tab(tab === k),
+                    display: "block",
+                    width: "100%",
+                    textAlign: "left",
+                  }}
+                  onClick={() => {
+                    setTab(k);
+                    setMode("select");
+                    setConnectFrom(null);
+                    setVerificationMenuOpen(false);
+                  }}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {tab === "topology" && (
@@ -306,9 +373,20 @@ export default function App() {
         <LiveFilePlots setConnected={setSseConnected} />
       </div>
       {tab === "evaluation" && <WatchdogAveragesTable />}
-      <div style={{ display: tab === "verification" ? "block" : "none" }}>
+
+      {tab === "verification-config" && (
+        <div style={{ padding: 12 }}>
+        Verification Config
+        </div>
+      )}
+
+      <div style={{ display: tab === "verification-bfs" ? "block" : "none" }}>
         <VerificationTree startSignal={verifySignal} />
       </div>
+
+      {tab === "verification-properties" && <VerificationProperties />}
+
+      {tab === "verification-results" && <VerificationResults />}
 
 
       {toast && <div style={S.toast}>{toast}</div>}
