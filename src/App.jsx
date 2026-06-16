@@ -377,7 +377,10 @@ export default function App() {
 
       {tab === "overview" && <OverviewPanel state={state}/>}
       {tab === "config" && <ConfigPanel state={state} setState={setState}/>}
-      <div style={{ display: tab === "live" ? "block" : "none" }}>
+      <div style={tab === "live"
+        ? {}
+        : { position: "fixed", top: -99999, left: 0, width: "100vw", visibility: "hidden" }
+      }>
         <LiveFilePlots setConnected={setSseConnected} />
       </div>
       {tab === "evaluation" && <WatchdogAveragesTable />}

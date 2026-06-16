@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { createRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -187,7 +187,7 @@ const basePlugins = (showLegend) => ({
   tooltip: { enabled: true, backgroundColor: "rgba(20,20,24,0.95)", titleColor: "#fff", bodyColor: "rgba(255,255,255,0.82)", borderColor: "rgba(255,255,255,0.12)", borderWidth: 1, padding: 10, displayColors: true },
 });
 
-function SinglePlotCard({ plot, history }) {
+function SinglePlotCard({ plot, history, chartRef }) {
   const points = useMemo(() => seriesPoints(history, plot.id), [history, plot.id]);
   const hasData = points.length > 0;
   const latest = hasData ? points[points.length - 1].y : null;
@@ -228,14 +228,14 @@ function SinglePlotCard({ plot, history }) {
       </div>
       <div style={styles.chartShell}>
         {hasData
-          ? <div style={styles.chartWrap}><Line data={chartData} options={chartOptions} /></div>
+          ? <div style={styles.chartWrap}><Line ref={chartRef} data={chartData} options={chartOptions} /></div>
           : <div style={styles.emptyState}>Waiting for data...</div>}
       </div>
     </div>
   );
 }
 
-function MultiPlotCard({ plot, history }) {
+function MultiPlotCard({ plot, history, chartRef }) {
   const datasets = useMemo(() => plot.series.map((s, idx) => {
     const pts = seriesPoints(history, s.key);
     return {
@@ -275,7 +275,7 @@ function MultiPlotCard({ plot, history }) {
       </div>
       <div style={styles.chartShell}>
         {hasData
-          ? <div style={styles.chartWrap}><Line data={chartData} options={chartOptions} /></div>
+          ? <div style={styles.chartWrap}><Line ref={chartRef} data={chartData} options={chartOptions} /></div>
           : <div style={styles.emptyState}>Waiting for data...</div>}
       </div>
     </div>
@@ -285,6 +285,87 @@ function MultiPlotCard({ plot, history }) {
 export default function LiveFilePlots({ setConnected }) {
   const [history, setHistory] = useState([]);
   const [log, setLog]         = useState([]);
+  const captureTimer = useRef(null);
+
+  // Stable ref arrays — one per chart, created once on mount.
+  const singleRefs = useRef(SINGLE_PLOTS.map(() => createRef()));
+  const multiRefs  = useRef(MULTI_PLOTS.map(() => createRef()));
+
+  const captureScreenshot = useCallback((step) => {
+    const COLS = 2;
+    const dpr  = window.devicePixelRatio || 1;
+
+    const allPlots = [
+      ...SINGLE_PLOTS.map((p, i) => ({ title: p.title, ref: singleRefs.current[i] })),
+      ...MULTI_PLOTS.map((p, i)  => ({ title: p.title, ref: multiRefs.current[i]  })),
+    ];
+    const totalGroups = Math.ceil(allPlots.length / 4);
+
+    for (let gi = 0; gi * 4 < allPlots.length; gi++) {
+      const group = allPlots.slice(gi * 4, gi * 4 + 4);
+
+      // Use the natural canvas pixel size from the first chart that has data.
+      let cellW = 0, cellH = 0;
+      for (const { ref } of group) {
+        const cvs = ref.current?.canvas;
+        if (cvs && cvs.width > 0 && cvs.height > 0) { cellW = cvs.width; cellH = cvs.height; break; }
+      }
+      if (cellW === 0) continue; // no chart has rendered yet
+
+      const TITLE_H = Math.round(28 * dpr);
+      const rows    = Math.ceil(group.length / COLS);
+
+      const offscreen = document.createElement("canvas");
+      offscreen.width  = cellW * COLS;
+      offscreen.height = (cellH + TITLE_H) * rows;
+      const ctx = offscreen.getContext("2d");
+
+      ctx.fillStyle = "#13131a";
+      ctx.fillRect(0, 0, offscreen.width, offscreen.height);
+
+      for (let ci = 0; ci < group.length; ci++) {
+        const { title, ref } = group[ci];
+        const col = ci % COLS;
+        const row = Math.floor(ci / COLS);
+        const x   = col * cellW;
+        const y   = row * (cellH + TITLE_H);
+
+        ctx.fillStyle = "rgba(245,245,245,0.85)";
+        ctx.font = `bold ${Math.round(13 * dpr)}px sans-serif`;
+        ctx.fillText(title, x + Math.round(12 * dpr), y + Math.round(19 * dpr));
+
+        const cvs = ref.current?.canvas;
+        if (cvs && cvs.width > 0) {
+          // Draw 1-to-1 at natural pixel size — no scaling distortion.
+          ctx.drawImage(cvs, x, y + TITLE_H);
+        } else {
+          ctx.fillStyle = "rgba(255,255,255,0.06)";
+          ctx.fillRect(x, y + TITLE_H, cellW, cellH);
+          ctx.fillStyle = "rgba(245,245,245,0.3)";
+          ctx.font = `${Math.round(12 * dpr)}px sans-serif`;
+          ctx.fillText("No data", x + cellW / 2 - Math.round(24 * dpr), y + TITLE_H + cellH / 2);
+        }
+      }
+
+      const dataUrl = offscreen.toDataURL("image/png");
+      fetch("http://127.0.0.1:9999/screenshot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: dataUrl, step, group: gi + 1, totalGroups }),
+      }).catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    if (history.length === 0) return;
+    clearTimeout(captureTimer.current);
+    const snap = history[history.length - 1];
+    captureTimer.current = setTimeout(
+      () => captureScreenshot(snap?.x ?? history.length),
+      800,
+    );
+    return () => clearTimeout(captureTimer.current);
+  }, [history.length, captureScreenshot]);
 
   useEffect(() => {
     const source = new EventSource(SSE_URL);
@@ -330,15 +411,15 @@ export default function LiveFilePlots({ setConnected }) {
       </div>
 
       <div style={styles.grid}>
-        {SINGLE_PLOTS.map((plot) => (
-          <SinglePlotCard key={plot.id} plot={plot} history={history} />
+        {SINGLE_PLOTS.map((plot, i) => (
+          <SinglePlotCard key={plot.id} plot={plot} history={history} chartRef={singleRefs.current[i]} />
         ))}
       </div>
 
       <div style={styles.sectionLabel}>Per-subnet &amp; decomposition</div>
       <div style={styles.grid}>
-        {MULTI_PLOTS.map((plot) => (
-          <MultiPlotCard key={plot.id} plot={plot} history={history} />
+        {MULTI_PLOTS.map((plot, i) => (
+          <MultiPlotCard key={plot.id} plot={plot} history={history} chartRef={multiRefs.current[i]} />
         ))}
       </div>
     </div>
