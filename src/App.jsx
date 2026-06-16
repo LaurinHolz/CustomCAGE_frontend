@@ -33,6 +33,7 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [showJSON, setShowJSON] = useState(false);
   const [sseConnected, setSseConnected] = useState(false);
+  const [isTraining, setIsTraining] = useState(false);
   const [visualizerOn, setVisualizerOn] = useState(false);
   const [evalModalOpen, setEvalModalOpen] = useState(false);
   const [verifySignal, setVerifySignal] = useState(0);
@@ -117,18 +118,29 @@ export default function App() {
   };
 
   const handleSendToServer = async () => {
-  try {
-    const res = await fetch("http://127.0.0.1:9999", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(backendData),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    showToast("Sent to server ✓");
-  } catch (err) {
-    showToast(`Failed: ${err.message}`);
-  }
-};
+    try {
+      const res = await fetch("http://127.0.0.1:9999", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(backendData),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setIsTraining(true);
+      showToast("Training started ✓");
+    } catch (err) {
+      showToast(`Failed: ${err.message}`);
+    }
+  };
+
+  const handleStopTraining = async () => {
+    try {
+      await fetch("http://127.0.0.1:9999/stop", { method: "POST" });
+      setIsTraining(false);
+      showToast("Training stopped — creating video…");
+    } catch (err) {
+      showToast(`Failed: ${err.message}`);
+    }
+  };
 
   const handleEvaluate = () => setEvalModalOpen(true);
 
@@ -209,7 +221,10 @@ export default function App() {
             <option value="empty">Empty (Custom)</option>
           </select>
           <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleDownload}>Download JSON</button>
-          <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleSendToServer}>Train</button>
+          <button
+            style={{ ...S.btn, ...(isTraining ? { background: '#E24B4A', color: '#fff', border: 'none' } : S.btnSuccess) }}
+            onClick={isTraining ? handleStopTraining : handleSendToServer}
+          >{isTraining ? "Stop" : "Train"}</button>
           <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleEvaluate}>Evaluate</button>
           <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleVerify}>Verify</button>
           <ToggleSwitch
