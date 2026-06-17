@@ -15,6 +15,7 @@ import VerificationTree from "./components/VerificationTree";
 import VerificationProperties from "./components/VerificationProperties";
 import VerificationResults from "./components/VerificationResults";
 import EvaluateModal from "./components/EvaluateModal";
+import TrainModal from "./components/TrainModal";
 import ToggleSwitch from "./components/ToggleSwitch";
 
 const VERIFICATION_OPTIONS = [
@@ -33,7 +34,8 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [showJSON, setShowJSON] = useState(false);
   const [sseConnected, setSseConnected] = useState(false);
-  const [isTraining, setIsTraining] = useState(false);
+  const [isTraining, setIsTraining]     = useState(false);
+  const [trainModalOpen, setTrainModalOpen] = useState(false);
   const [visualizerOn, setVisualizerOn] = useState(false);
   const [evalModalOpen, setEvalModalOpen] = useState(false);
   const [verifySignal, setVerifySignal] = useState(0);
@@ -117,15 +119,23 @@ export default function App() {
     showToast("JSON downloaded");
   };
 
-  const handleSendToServer = async () => {
+  const runTrain = async ({ ckptDir, ckptPath, startEpisode, maxEpisodes, maxTimesteps }) => {
     try {
-      const res = await fetch("http://127.0.0.1:9999", {
+      const params = new URLSearchParams();
+      params.set("ckpt_dir", ckptDir);
+      if (ckptPath) params.set("ckpt_path", ckptPath);
+      params.set("start_episode", String(startEpisode));
+      params.set("max_episodes", String(maxEpisodes));
+      params.set("max_timesteps", String(maxTimesteps));
+
+      const res = await fetch(`http://127.0.0.1:9999?${params}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(backendData),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setIsTraining(true);
+      setTrainModalOpen(false);
       showToast("Training started ✓");
     } catch (err) {
       showToast(`Failed: ${err.message}`);
@@ -223,7 +233,7 @@ export default function App() {
           <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleDownload}>Download JSON</button>
           <button
             style={{ ...S.btn, ...(isTraining ? { background: '#E24B4A', color: '#fff', border: 'none' } : S.btnSuccess) }}
-            onClick={isTraining ? handleStopTraining : handleSendToServer}
+            onClick={isTraining ? handleStopTraining : () => setTrainModalOpen(true)}
           >{isTraining ? "Stop" : "Train"}</button>
           <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleEvaluate}>Evaluate</button>
           <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleVerify}>Verify</button>
@@ -413,6 +423,12 @@ export default function App() {
 
 
       {toast && <div style={S.toast}>{toast}</div>}
+      {trainModalOpen && (
+        <TrainModal
+          onClose={() => setTrainModalOpen(false)}
+          onRun={runTrain}
+        />
+      )}
       {evalModalOpen && (
         <EvaluateModal
           onClose={() => setEvalModalOpen(false)}
