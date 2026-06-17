@@ -146,7 +146,7 @@ function DistributionPie({ fields, prefix, averages }) {
     plugins: {
       legend: {
         position: "right",
-        labels: { color: TEXT_SECONDARY, boxWidth: 12, padding: 10, font: { size: 11 } },
+        labels: { color: "#f0f0f5", boxWidth: 12, padding: 10, font: { size: 11 } },
       },
       tooltip: {
         callbacks: {
@@ -158,7 +158,7 @@ function DistributionPie({ fields, prefix, averages }) {
   return <Pie data={data} options={options} />;
 }
 
-export default function WatchdogAveragesTable() {
+export default function WatchdogAveragesTable({ evalState = "idle" }) {
   const [averages, setAverages] = useState(null);
   const [fileCount, setFileCount] = useState(0);
   const [error, setError] = useState(null);
@@ -181,10 +181,11 @@ export default function WatchdogAveragesTable() {
   }, []);
 
   useEffect(() => {
+    if (evalState !== "done") return;
     load();
     const id = setInterval(load, POLL_MS);
     return () => clearInterval(id);
-  }, [load]);
+  }, [load, evalState]);
 
   const groups = [];
   if (averages) {
@@ -206,21 +207,39 @@ export default function WatchdogAveragesTable() {
           <p style={styles.subtitle}>Mean of each field across every snapshot in data/evaluation/</p>
         </div>
         <div style={styles.controls}>
-          <span style={styles.pill}>{fileCount} file{fileCount === 1 ? "" : "s"}</span>
-          {updatedAt && (
-            <span style={styles.pill}>Updated {updatedAt.toLocaleTimeString()}</span>
+          {evalState === "done" && (
+            <>
+              <span style={styles.pill}>{fileCount} file{fileCount === 1 ? "" : "s"}</span>
+              {updatedAt && (
+                <span style={styles.pill}>Updated {updatedAt.toLocaleTimeString()}</span>
+              )}
+              <button style={styles.button} onClick={load}>Refresh</button>
+            </>
           )}
-          <button style={styles.button} onClick={load}>Refresh</button>
         </div>
       </div>
 
-      {groups.length === 0 ? (
+      {evalState === "idle" && (
+        <div style={styles.emptyState}>
+          <span>No evaluation run yet. Click <strong>Evaluate</strong> in the toolbar to start.</span>
+        </div>
+      )}
+
+      {evalState === "running" && (
+        <div style={styles.emptyState}>
+          Evaluation in progress — results will appear here when complete.
+        </div>
+      )}
+
+      {evalState === "done" && groups.length === 0 && (
         <div style={styles.emptyState}>
           {error
-            ? `Could not reach the backend server (http://127.0.0.1:9999): ${error}`
-            : "No data yet."}
+            ? `Could not reach the backend server: ${error}`
+            : "No evaluation data found."}
         </div>
-      ) : (
+      )}
+
+      {evalState === "done" && groups.length > 0 && (
         <div style={styles.grid}>
           {groups.map((group) => (
             <div key={group.title} style={styles.card}>

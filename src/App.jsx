@@ -45,6 +45,7 @@ export default function App() {
   }, [theme]);
   const [visualizerOn, setVisualizerOn] = useState(false);
   const [evalModalOpen, setEvalModalOpen] = useState(false);
+  const [evalState, setEvalState] = useState("idle"); // "idle" | "running" | "done"
   const [verifySignal, setVerifySignal] = useState(0);
   const [verificationView, setVerificationView] = useState("bfs");
   const [verifMenuOpen, setVerifMenuOpen] = useState(false);
@@ -193,6 +194,7 @@ export default function App() {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setEvalModalOpen(false);
+      setEvalState("running");
       showToast("Evaluation started ✓");
     } catch (err) {
       showToast(`Failed: ${err.message}`);
@@ -424,10 +426,11 @@ export default function App() {
         <LiveFilePlots
           setConnected={setSseConnected}
           onTrainingDone={() => setIsTraining(false)}
+          onEvaluationDone={() => setEvalState("done")}
           screenshotsEnabled={screenshotsEnabled}
         />
       </div>
-      {tab === "evaluation" && <WatchdogAveragesTable />}
+      {tab === "evaluation" && <WatchdogAveragesTable evalState={evalState} />}
       <div style={{ display: tab === "verification" ? "block" : "none" }}>
         <div style={{ display: verificationView === "bfs" ? "block" : "none" }}>
           <VerificationTree startSignal={verifySignal} />

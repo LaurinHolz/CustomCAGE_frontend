@@ -282,7 +282,7 @@ function MultiPlotCard({ plot, history, chartRef }) {
   );
 }
 
-export default function LiveFilePlots({ setConnected, onTrainingDone, screenshotsEnabled }) {
+export default function LiveFilePlots({ setConnected, onTrainingDone, onEvaluationDone, screenshotsEnabled }) {
   const [history, setHistory] = useState([]);
   const [log, setLog]         = useState([]);
   const captureTimer = useRef(null);
@@ -378,6 +378,10 @@ export default function LiveFilePlots({ setConnected, onTrainingDone, screenshot
 
     source.onmessage = (event) => {
       const data = JSON.parse(event.data);
+      if (data.type === "evaluation_done") {
+        onEvaluationDone?.();
+        return;
+      }
       if (data.type === "training_done") {
         if (screenshotsEnabledRef.current) {
           // Wait 2 s after training_done so the last 800 ms screenshot timer
