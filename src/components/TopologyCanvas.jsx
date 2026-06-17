@@ -332,10 +332,10 @@ export default function TopologyCanvas({ state, setState, mode, connectFrom, set
                 stroke={borderCol} strokeWidth="0.4" opacity="0.5"/>
             )}
             <text x={h.x + HOST_W/2} y={h.y + HOST_H/2 + 1} textAnchor="middle" dominantBaseline="central"
-              fontSize="11" fontWeight={isSelected ? "600" : "500"} fill="var(--color-text-primary)" fontFamily="inherit">
+              fontSize="11" fontWeight={isSelected ? "700" : "600"} fill="var(--color-text-primary)" fontFamily="inherit">
               {h.name}
             </text>
-            <text x={h.x + HOST_W - 4} y={h.y + 9} textAnchor="end" fontSize="7" fill={borderCol} fontFamily="inherit" opacity="0.7">
+            <text x={h.x + HOST_W - 4} y={h.y + 9} textAnchor="end" fontSize="7" fill="var(--color-text-secondary)" fontFamily="inherit" opacity="0.85">
               {isServer ? "srv" : "hst"}
             </text>
           </g>

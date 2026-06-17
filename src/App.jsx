@@ -37,6 +37,12 @@ export default function App() {
   const [isTraining, setIsTraining]         = useState(false);
   const [screenshotsEnabled, setScreenshotsEnabled] = useState(false);
   const [trainModalOpen, setTrainModalOpen] = useState(false);
+  const [theme, setTheme] = useState(() => localStorage.getItem("aegis-theme") || "dark");
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("aegis-theme", theme);
+  }, [theme]);
   const [visualizerOn, setVisualizerOn] = useState(false);
   const [evalModalOpen, setEvalModalOpen] = useState(false);
   const [verifySignal, setVerifySignal] = useState(0);
@@ -244,6 +250,13 @@ export default function App() {
             onToggle={handleToggleVisualizer}
             label="Visualizer"
           />
+          <button
+            style={{ ...S.btn, fontSize: 15, padding: '4px 10px', lineHeight: 1 }}
+            onClick={() => setTheme(t => t === "dark" ? "light" : "dark")}
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {theme === "dark" ? "☀" : "☾"}
+          </button>
         </div>
       </div>
 

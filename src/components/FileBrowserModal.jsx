@@ -6,10 +6,10 @@ const MKDIR_URL  = "http://127.0.0.1:9999/mkdir";
 const C = {
   folder:    "#E0A458",
   file:      "#8BB8E8",
-  border:    "rgba(255,255,255,0.07)",
-  borderSub: "rgba(255,255,255,0.05)",
-  textPri:   "var(--color-text-primary, #f5f5f5)",
-  textSec:   "var(--color-text-secondary, rgba(255,255,255,0.50))",
+  border:    "var(--modal-border)",
+  borderSub: "var(--color-border-tertiary)",
+  textPri:   "var(--color-text-primary)",
+  textSec:   "var(--color-text-secondary)",
   blue:      "#3B8BD4",
   blueGlow:  "rgba(59,139,212,0.35)",
 };
@@ -91,8 +91,8 @@ const S = {
     width: "min(640px, 100%)", height: "min(580px, 90vh)",
     display: "flex", flexDirection: "column",
     borderRadius: 16, border: `1px solid ${C.border}`,
-    background: "linear-gradient(180deg, rgba(32,34,42,0.99) 0%, rgba(17,18,23,0.99) 100%)",
-    boxShadow: "0 40px 100px rgba(0,0,0,0.7), 0 0 0 0.5px rgba(255,255,255,0.06) inset",
+    background: "var(--modal-bg)",
+    boxShadow: "0 40px 100px rgba(0,0,0,0.5)",
     color: C.textPri, overflow: "hidden",
   },
 
