@@ -5,7 +5,7 @@ export const S = {
   title: { fontSize: 16, fontWeight: 500, color: 'var(--color-text-primary)', letterSpacing: '-0.3px' },
   badge: { fontSize: 10, padding: '2px 8px', borderRadius: 'var(--border-radius-md)', background: 'var(--color-background-info)', color: 'var(--color-text-info)', fontWeight: 500, letterSpacing: '0.5px', textTransform: 'uppercase' },
   select: { fontSize: 12, padding: '6px 10px', borderRadius: 'var(--border-radius-md)', border: '0.5px solid var(--color-border-secondary)', background: 'var(--color-background-primary)', color: 'var(--color-text-primary)', cursor: 'pointer', outline: 'none', fontFamily: 'inherit' },
-  btn: { fontSize: 11, padding: '6px 14px', borderRadius: 'var(--border-radius-md)', border: '0.5px solid var(--color-border-secondary)', background: 'var(--color-background-primary)', color: 'var(--color-text-primary)', cursor: 'pointer', fontWeight: 500, transition: 'all .15s', whiteSpace: 'nowrap', fontFamily: 'inherit' },
+  btn: { fontSize: 11, padding: '6px 14px', borderRadius: 999, border: '0.5px solid var(--color-border-secondary)', background: 'var(--color-background-primary)', color: 'var(--color-text-primary)', cursor: 'pointer', fontWeight: 500, transition: 'all .15s', whiteSpace: 'nowrap', fontFamily: 'inherit' },
   btnPrimary: { background: 'var(--color-text-primary)', color: 'var(--color-background-primary)', border: 'none' },
   btnSuccess: { background: '#1D9E75', color: '#fff', border: 'none' },
   btnDanger: { background: 'var(--color-background-danger)', color: 'var(--color-text-danger)', border: '0.5px solid var(--color-border-danger)' },

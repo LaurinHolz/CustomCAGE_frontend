@@ -282,10 +282,14 @@ function MultiPlotCard({ plot, history, chartRef }) {
   );
 }
 
-export default function LiveFilePlots({ setConnected }) {
+export default function LiveFilePlots({ setConnected, onTrainingDone, screenshotsEnabled }) {
   const [history, setHistory] = useState([]);
   const [log, setLog]         = useState([]);
   const captureTimer = useRef(null);
+
+  // Keep a ref so the SSE closure (opened once) can read the current value.
+  const screenshotsEnabledRef = useRef(screenshotsEnabled);
+  useEffect(() => { screenshotsEnabledRef.current = screenshotsEnabled; }, [screenshotsEnabled]);
 
   // Stable ref arrays — one per chart, created once on mount.
   const singleRefs = useRef(SINGLE_PLOTS.map(() => createRef()));
@@ -357,7 +361,7 @@ export default function LiveFilePlots({ setConnected }) {
   }, []);
 
   useEffect(() => {
-    if (history.length === 0) return;
+    if (history.length === 0 || !screenshotsEnabled) return;
     clearTimeout(captureTimer.current);
     const snap = history[history.length - 1];
     captureTimer.current = setTimeout(
@@ -365,7 +369,7 @@ export default function LiveFilePlots({ setConnected }) {
       800,
     );
     return () => clearTimeout(captureTimer.current);
-  }, [history.length, captureScreenshot]);
+  }, [history.length, captureScreenshot, screenshotsEnabled]);
 
   useEffect(() => {
     const source = new EventSource(SSE_URL);
@@ -374,6 +378,17 @@ export default function LiveFilePlots({ setConnected }) {
 
     source.onmessage = (event) => {
       const data = JSON.parse(event.data);
+      if (data.type === "training_done") {
+        if (screenshotsEnabledRef.current) {
+          // Wait 2 s after training_done so the last 800 ms screenshot timer
+          // has time to fire and the PNG reaches the server before we compile.
+          setTimeout(() => {
+            fetch("http://127.0.0.1:9999/make-video", { method: "POST" }).catch(() => {});
+          }, 2000);
+        }
+        onTrainingDone?.();
+        return;
+      }
       setHistory((prev) => {
         const snap = normalizeSnapshot(data, prev.length + 1);
         setLog((prevLog) => [

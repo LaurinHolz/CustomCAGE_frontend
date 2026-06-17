@@ -99,12 +99,12 @@ const styles = {
     padding: "16px 24px", borderTop: "1px solid rgba(255,255,255,0.07)", background: "rgba(0,0,0,0.15)",
   },
   cancelBtn: {
-    padding: "9px 16px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.12)",
+    padding: "9px 16px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)",
     background: "rgba(255,255,255,0.04)", color: TEXT_PRIMARY,
     fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
   },
   runBtn: (disabled) => ({
-    padding: "9px 18px", borderRadius: 9, border: "none",
+    padding: "9px 18px", borderRadius: 999, border: "none",
     background: disabled ? "rgba(29,158,117,0.25)" : "linear-gradient(180deg, #21B989, #1D9E75)",
     color: disabled ? "rgba(255,255,255,0.4)" : "#fff",
     fontSize: 12.5, fontWeight: 700, fontFamily: "inherit",
@@ -158,6 +158,7 @@ export default function TrainModal({ onClose, onRun }) {
   // Shared
   const [maxEpisodes, setMaxEpisodes]   = useState(100000);
   const [maxTimesteps, setMaxTimesteps] = useState(100);
+  const [makeVideo, setMakeVideo]       = useState(true);
 
   // File browser: { mode: "dir"|"file", target: "ckptDir"|"ckptFile"|"saveDir" } | null
   const [browser, setBrowser] = useState(null);
@@ -206,6 +207,7 @@ export default function TrainModal({ onClose, onRun }) {
       startEpisode: mode === "continue" ? startEpisode : 1,
       maxEpisodes:  maxEp,
       maxTimesteps: Math.max(1, parseInt(maxTimesteps, 10) || 100),
+      makeVideo,
     });
   };
 
@@ -379,6 +381,35 @@ export default function TrainModal({ onClose, onRun }) {
                 />
               </div>
             </div>
+          </div>
+
+          {/* ── Make Video toggle ── */}
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "12px 14px", borderRadius: 12,
+            background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)",
+          }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+              <span style={{ fontSize: 12.5, fontWeight: 600 }}>Make video</span>
+              <span style={{ fontSize: 11, color: TEXT_SECONDARY }}>
+                Capture screenshots and compile a video after training ends
+              </span>
+            </div>
+            <button
+              onClick={() => setMakeVideo(v => !v)}
+              style={{
+                position: "relative", width: 44, height: 24, borderRadius: 999,
+                border: "none", cursor: "pointer", flexShrink: 0,
+                background: makeVideo ? "#1D9E75" : "rgba(255,255,255,0.12)",
+                transition: "background .2s",
+              }}
+            >
+              <span style={{
+                position: "absolute", top: 2, left: makeVideo ? 22 : 2,
+                width: 20, height: 20, borderRadius: "50%",
+                background: "#fff", transition: "left .2s",
+              }}/>
+            </button>
           </div>
 
         </div>

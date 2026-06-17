@@ -34,7 +34,8 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [showJSON, setShowJSON] = useState(false);
   const [sseConnected, setSseConnected] = useState(false);
-  const [isTraining, setIsTraining]     = useState(false);
+  const [isTraining, setIsTraining]         = useState(false);
+  const [screenshotsEnabled, setScreenshotsEnabled] = useState(false);
   const [trainModalOpen, setTrainModalOpen] = useState(false);
   const [visualizerOn, setVisualizerOn] = useState(false);
   const [evalModalOpen, setEvalModalOpen] = useState(false);
@@ -119,7 +120,7 @@ export default function App() {
     showToast("JSON downloaded");
   };
 
-  const runTrain = async ({ ckptDir, ckptPath, startEpisode, maxEpisodes, maxTimesteps }) => {
+  const runTrain = async ({ ckptDir, ckptPath, startEpisode, maxEpisodes, maxTimesteps, makeVideo }) => {
     try {
       const params = new URLSearchParams();
       params.set("ckpt_dir", ckptDir);
@@ -135,6 +136,7 @@ export default function App() {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setIsTraining(true);
+      setScreenshotsEnabled(!!makeVideo);
       setTrainModalOpen(false);
       showToast("Training started ✓");
     } catch (err) {
@@ -406,7 +408,11 @@ export default function App() {
         ? {}
         : { position: "fixed", top: -99999, left: 0, width: "100vw", visibility: "hidden" }
       }>
-        <LiveFilePlots setConnected={setSseConnected} />
+        <LiveFilePlots
+          setConnected={setSseConnected}
+          onTrainingDone={() => setIsTraining(false)}
+          screenshotsEnabled={screenshotsEnabled}
+        />
       </div>
       {tab === "evaluation" && <WatchdogAveragesTable />}
       <div style={{ display: tab === "verification" ? "block" : "none" }}>
