@@ -164,8 +164,6 @@ export default function App() {
   const handleEvaluate = () => setEvalModalOpen(true);
 
   const handleVerify = async () => {
-    setTab("verification");
-    setVerificationView("bfs");
     try {
       const res = await fetch("http://127.0.0.1:9999/verify", {
         method: "POST",

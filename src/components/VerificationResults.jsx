@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useMemo, useState } from "react";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 import { S } from "../styles/styles";
@@ -281,41 +281,76 @@ function AvailabilityChart({ title, datasets }) {
 }
 
 export default function VerificationResults() {
-  const [results, setResults] = useState(null);
+  const [results, setResults]           = useState(null);
   const [propertiesText, setPropertiesText] = useState("");
-  const [csv, setCsv] = useState({});
+  const [csv, setCsv]                   = useState({});
+  const [verifyRunning, setVerifyRunning] = useState(false);
+  const wasRunningRef = useRef(false);
+  const timerRef      = useRef(null);
+
+  const loadResults = useCallback(async () => {
+    try {
+      const data = await fetch(`${BASE}/verification-results`).then((r) => r.json());
+      setResults(data);
+
+      if (data.properties?.url) {
+        const txt = await fetch(`${BASE}${data.properties.url}`).then((r) => r.text());
+        setPropertiesText(txt);
+      }
+
+      const loaded = {};
+      for (const [key, item] of Object.entries(data)) {
+        if (key.startsWith("csv") && item?.url) {
+          loaded[key] = await fetchCsv(`${BASE}${item.url}`);
+        }
+      }
+      setCsv(loaded);
+    } catch {
+      setResults(null);
+      setCsv({});
+    }
+  }, []);
 
   useEffect(() => {
-    fetch(`${BASE}/verification-results`)
-      .then((res) => res.json())
-      .then(async (data) => {
-        setResults(data);
+    let cancelled = false;
 
-        if (data.properties?.url) {
-          const txt = await fetch(`${BASE}${data.properties.url}`).then((r) => r.text());
-          setPropertiesText(txt);
+    const poll = async () => {
+      if (cancelled) return;
+      try {
+        const status = await fetch(`${BASE}/verification-tree`).then((r) => r.json());
+        const running = !!status.running;
+        if (!cancelled) {
+          setVerifyRunning(running);
+          // Re-fetch results when verify just finished, or on the very first check
+          const justFinished = wasRunningRef.current && !running;
+          const firstCheck   = !wasRunningRef.current && !running;
+          if (justFinished || firstCheck) await loadResults();
+          wasRunningRef.current = running;
         }
+      } catch { /* server not up yet */ }
 
-        const loaded = {};
+      if (!cancelled) timerRef.current = setTimeout(poll, 3000);
+    };
 
-        for (const [key, item] of Object.entries(data)) {
-          if (key.startsWith("csv") && item?.url) {
-            loaded[key] = await fetchCsv(`${BASE}${item.url}`);
-          }
-        }
-
-        setCsv(loaded);
-      })
-      .catch(() => {
-        setResults(null);
-        setCsv({});
-      });
-  }, []);
+    poll();
+    return () => {
+      cancelled = true;
+      clearTimeout(timerRef.current);
+    };
+  }, [loadResults]);
 
   return (
     <div style={{ padding: 12 }}>
       <div style={S.panel}>
         <h3 style={sectionTitle}>Verification Results</h3>
+
+        <style>{`@keyframes vrPulse { 0%,100%{opacity:1} 50%{opacity:0.3} }`}</style>
+        {verifyRunning && (
+          <div style={runningBanner}>
+            <span style={{ ...runningDot, animation: "vrPulse 1.4s ease-in-out infinite" }} />
+            Verification in progress — results will load automatically when complete.
+          </div>
+        )}
 
         <div style={sectionHeader}>
           <span style={sectionLabel}>Safety / Reachability Properties</span>
@@ -323,7 +358,11 @@ export default function VerificationResults() {
         {propertiesText ? (
           <PropertyList text={propertiesText} />
         ) : (
-          <p style={emptyText}>No <code style={inlineCode}>safety_properties.txt</code> found — run Verify to generate results.</p>
+          <p style={emptyText}>
+            {verifyRunning
+              ? "Waiting for verification to complete…"
+              : "Start verification to generate results."}
+          </p>
         )}
 
         <div style={{ ...sectionHeader, marginTop: 20 }}>
@@ -443,6 +482,27 @@ const propIdxBadge = {
   border: "1px solid",
 };
 
+const runningBanner = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  padding: "8px 12px",
+  marginBottom: 14,
+  borderRadius: "var(--border-radius-md)",
+  background: "rgba(78,195,201,0.08)",
+  border: "0.5px solid rgba(78,195,201,0.3)",
+  fontSize: 12,
+  color: "#4EC3C9",
+};
+
+const runningDot = {
+  width: 7,
+  height: 7,
+  borderRadius: "50%",
+  background: "#4EC3C9",
+  flexShrink: 0,
+};
+
 const expandBtn = {
   fontSize: 10,
   fontWeight: 600,
@@ -478,14 +538,6 @@ const emptyText = {
   margin: "8px 0",
 };
 
-const inlineCode = {
-  fontSize: 11,
-  fontFamily: "var(--font-mono)",
-  background: "var(--color-background-secondary)",
-  padding: "1px 5px",
-  borderRadius: 4,
-  border: "0.5px solid var(--color-border-tertiary)",
-};
 
 const card = {
   border: "0.5px solid var(--color-border-tertiary)",
