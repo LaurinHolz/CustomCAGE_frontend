@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import katex from "katex";
+import "katex/dist/katex.min.css";
 import { S } from "../styles/styles";
 import {
   Chart as ChartJS,
@@ -21,6 +23,147 @@ ChartJS.register(
 );
 
 const BASE = "http://127.0.0.1:9999";
+
+// ── PRISM → LaTeX converter ────────────────────────────────────────────────────
+
+function prismToLatex(formula) {
+  let s = formula;
+  // Quoted state labels → \texttt{...} with escaped underscores
+  s = s.replace(/"([^"]*)"/g, (_, inner) =>
+    `\\texttt{${inner.replace(/_/g, "\\_")}}`
+  );
+  // Bounded until
+  s = s.replace(/U<=(\d+)/g, "\\mathbf{U}_{\\leq $1}");
+  // P=?
+  s = s.replace(/P=\?/g, "P_{=?}");
+  // Temporal operators (after labels are already protected)
+  s = s.replace(/\bF\b/g, "\\mathbf{F}\\,");
+  s = s.replace(/\bG\b/g, "\\mathbf{G}\\,");
+  s = s.replace(/\bX\b/g, "\\mathbf{X}\\,");
+  // Logic
+  s = s.replace(/!/g, "\\neg\\,");
+  s = s.replace(/\s*&\s*/g, " \\wedge ");
+  s = s.replace(/\s*\|\s*/g, " \\vee ");
+  // Constants
+  s = s.replace(/\btrue\b/g, "\\top");
+  s = s.replace(/\bfalse\b/g, "\\bot");
+  // Operator brackets
+  s = s.replace(/\[/g, "\\left[");
+  s = s.replace(/\]/g, "\\right]");
+  s = s.replace(/\(/g, "\\left(");
+  s = s.replace(/\)/g, "\\right)");
+  return s;
+}
+
+function probColor(formula, prob) {
+  if (/P=\?\s*\[\s*F\b/.test(formula))
+    return prob < 0.05 ? "#1D9E75" : prob > 0.8 ? "#E24B4A" : "#E0A458";
+  if (/P=\?\s*\[\s*G\b/.test(formula))
+    return prob > 0.95 ? "#1D9E75" : prob < 0.3 ? "#E24B4A" : "#E0A458";
+  return "#f5f5f5";
+}
+
+function parseProperty(line) {
+  const arrowIdx = line.lastIndexOf(" -> ");
+  if (arrowIdx === -1) return null;
+  const left = line.slice(0, arrowIdx).trim();
+  const probStr = line.slice(arrowIdx + 4).trim();
+  const m = left.match(/^\((\d+)\)\s+(.+)$/);
+  if (!m) return null;
+  return { index: m[1], formula: m[2], prob: parseFloat(probStr), probStr };
+}
+
+const LONG_LIMIT = 80;
+
+function collapsedLatex(formula) {
+  const fM = formula.match(/^P=\?\s*\[\s*F\s*"([^"]+)"\s*\]$/);
+  if (fM) return `P_{=?}\\left[\\mathbf{F}\\;\\texttt{${fM[1].replace(/_/g, "\\_")}}\\right]`;
+  if (/^P=\?\s*\[\s*G\b/.test(formula)) return `P_{=?}\\left[\\mathbf{G}\\,\\left(\\cdots\\right)\\right]`;
+  if (/^P=\?\s*\[\s*F\b/.test(formula)) return `P_{=?}\\left[\\mathbf{F}\\;\\cdots\\right]`;
+  return `P_{=?}\\left[\\cdots\\right]`;
+}
+
+function formatFull(formula) {
+  return formula
+    .replace(/!/g, "¬")
+    .replace(/\s*&\s*/g, " ∧ ")
+    .replace(/\s*\|\s*/g, " ∨ ");
+}
+
+function PrismFormula({ formula }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = formula.length > LONG_LIMIT;
+
+  const latex = useMemo(
+    () => isLong && !expanded ? collapsedLatex(formula) : prismToLatex(formula),
+    [formula, isLong, expanded]
+  );
+  const html = useMemo(
+    () => katex.renderToString(latex, { throwOnError: false, displayMode: false }),
+    [latex]
+  );
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        {(!isLong || !expanded) && <span dangerouslySetInnerHTML={{ __html: html }} />}
+        {isLong && (
+          <button onClick={() => setExpanded(e => !e)} style={expandBtn}>
+            {expanded ? "collapse" : "expand"}
+          </button>
+        )}
+      </div>
+      {isLong && expanded && (
+        <pre style={fullFormulaPre}>{formatFull(formula)}</pre>
+      )}
+    </div>
+  );
+}
+
+function PropertyList({ text }) {
+  const props = text.split("\n").map(l => l.trim()).filter(Boolean).map(parseProperty).filter(Boolean);
+  if (!props.length) return null;
+  return (
+    <div style={propCard}>
+      <table style={propTable}>
+        <thead>
+          <tr>
+            <th style={propTh}>#</th>
+            <th style={propTh}>PCTL Formula</th>
+            <th style={{ ...propTh, textAlign: "right" }}>Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          {props.map((p) => {
+            const color = probColor(p.formula, p.prob);
+            const probStr = isNaN(p.prob) ? p.probStr : p.prob.toFixed(4);
+            return (
+              <tr
+                key={p.index}
+                onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.03)"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+              >
+                <td style={{ ...propTd, width: 44 }}>
+                  <span style={{ ...propIdxBadge, color, borderColor: color }}>
+                    {p.index}
+                  </span>
+                </td>
+                <td style={propTd}>
+                  <PrismFormula formula={p.formula} />
+                </td>
+                <td style={{ ...propTd, textAlign: "right", whiteSpace: "nowrap" }}>
+                  <span style={{ color, fontWeight: 700, fontFamily: "var(--font-mono)", fontSize: 13 }}>
+                    {probStr}
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 const colors = {
   total: "#4EC3C9",
@@ -129,7 +272,7 @@ function AvailabilityChart({ title, datasets }) {
 
   return (
     <div style={card}>
-      <h3 style={{ marginTop: 0 }}>{title}</h3>
+      <p style={{ margin: "0 0 12px", fontSize: 11, fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>{title}</p>
       <div style={chartWrap}>
         <Line data={chartData} options={options} />
       </div>
@@ -172,14 +315,20 @@ export default function VerificationResults() {
   return (
     <div style={{ padding: 12 }}>
       <div style={S.panel}>
-        <h3 style={{ marginTop: 0 }}>Verification Results</h3>
+        <h3 style={sectionTitle}>Verification Results</h3>
 
-        <h4>Safety / Reachability Properties</h4>
-        <pre style={preStyle}>
-          {propertiesText || "No safety_properties.txt found."}
-        </pre>
+        <div style={sectionHeader}>
+          <span style={sectionLabel}>Safety / Reachability Properties</span>
+        </div>
+        {propertiesText ? (
+          <PropertyList text={propertiesText} />
+        ) : (
+          <p style={emptyText}>No <code style={inlineCode}>safety_properties.txt</code> found — run Verify to generate results.</p>
+        )}
 
-        <h4>Availability Plots</h4>
+        <div style={{ ...sectionHeader, marginTop: 20 }}>
+          <span style={sectionLabel}>Availability Plots</span>
+        </div>
 
         {csv.csvTotal && (
           <AvailabilityChart
@@ -215,28 +364,135 @@ export default function VerificationResults() {
           />
         )}
 
-        {!results && <p>No verification results loaded.</p>}
+        {!results && (
+          <p style={emptyText}>No verification results loaded — run Verify to populate this tab.</p>
+        )}
       </div>
     </div>
   );
 }
 
-const preStyle = {
+const sectionTitle = {
+  marginTop: 0,
+  marginBottom: 16,
+  fontSize: 14,
+  fontWeight: 500,
+  color: "var(--color-text-primary)",
+  letterSpacing: "-0.2px",
+};
+
+const sectionHeader = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  marginBottom: 8,
+};
+
+const sectionLabel = {
   fontSize: 11,
-  whiteSpace: "pre-wrap",
-  background: "var(--color-surface-secondary)",
-  padding: 10,
+  fontWeight: 500,
+  color: "var(--color-text-secondary)",
+  textTransform: "uppercase",
+  letterSpacing: "0.5px",
+};
+
+const propCard = {
+  border: "1px solid rgba(255,255,255,0.09)",
+  borderRadius: 16,
+  background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015))",
+  overflow: "hidden",
+};
+
+const propTable = {
+  width: "100%",
+  borderCollapse: "collapse",
+  fontSize: 13,
+};
+
+const propTh = {
+  textAlign: "left",
+  padding: "12px 16px",
+  fontSize: 11,
+  fontWeight: 700,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  color: "var(--color-text-secondary)",
+  borderBottom: "1px solid rgba(255,255,255,0.09)",
+  whiteSpace: "nowrap",
+};
+
+const propTd = {
+  padding: "14px 16px",
+  borderBottom: "1px solid rgba(255,255,255,0.06)",
+  verticalAlign: "middle",
+  lineHeight: 1.55,
+  transition: "background .12s",
+};
+
+const propIdxBadge = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minWidth: 32,
+  padding: "3px 8px",
+  borderRadius: 999,
+  fontSize: 11,
+  fontWeight: 700,
+  fontFamily: "var(--font-mono, ui-monospace, monospace)",
+  background: "rgba(255,255,255,0.07)",
+  border: "1px solid",
+};
+
+const expandBtn = {
+  fontSize: 10,
+  fontWeight: 600,
+  color: "var(--color-text-info)",
+  background: "rgba(255,255,255,0.07)",
+  border: "1px solid rgba(255,255,255,0.14)",
+  borderRadius: 999,
+  padding: "2px 8px",
+  cursor: "pointer",
+  fontFamily: "inherit",
+  letterSpacing: "0.04em",
+  flexShrink: 0,
+};
+
+const fullFormulaPre = {
+  fontFamily: "var(--font-mono, ui-monospace, monospace)",
+  fontSize: 11,
+  lineHeight: 1.65,
+  background: "rgba(255,255,255,0.04)",
+  border: "1px solid rgba(255,255,255,0.08)",
   borderRadius: 8,
-  maxHeight: 260,
-  overflow: "auto",
+  padding: "10px 14px",
+  margin: "8px 0 0",
+  whiteSpace: "pre-wrap",
+  wordBreak: "break-word",
+  color: "rgba(255,255,255,0.82)",
+  overflowX: "hidden",
+};
+
+const emptyText = {
+  fontSize: 12,
+  color: "var(--color-text-secondary)",
+  margin: "8px 0",
+};
+
+const inlineCode = {
+  fontSize: 11,
+  fontFamily: "var(--font-mono)",
+  background: "var(--color-background-secondary)",
+  padding: "1px 5px",
+  borderRadius: 4,
+  border: "0.5px solid var(--color-border-tertiary)",
 };
 
 const card = {
-  border: "1px solid rgba(255,255,255,0.1)",
-  borderRadius: 16,
+  border: "0.5px solid var(--color-border-tertiary)",
+  borderRadius: "var(--border-radius-lg)",
   padding: 16,
-  marginBottom: 16,
-  background: "linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.03))",
+  marginBottom: 12,
+  background: "var(--color-background-secondary)",
 };
 
 const chartWrap = {
