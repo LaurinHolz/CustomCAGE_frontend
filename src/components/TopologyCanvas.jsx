@@ -214,16 +214,17 @@ export default function TopologyCanvas({ state, setState, mode, connectFrom, set
       if (hostsInZone.length === 0) {
         bounds[z.id] = { x: z.x - 10, y: z.y - 8, w: ZONE_W + 20, h: ZONE_H + 16 };
       } else {
-        const allX = [z.x, ...hostsInZone.map(h => h.x)];
-        const allY = [z.y, ...hostsInZone.map(h => h.y)];
-        const allXR = [z.x + ZONE_W, ...hostsInZone.map(h => h.x + HOST_W)];
-        const allYB = [z.y + ZONE_H, ...hostsInZone.map(h => h.y + HOST_H)];
-        const minx = Math.min(...allX) - ZONE_PAD;
-        const miny = Math.min(...allY) - ZONE_PAD;
-        const maxx = Math.max(...allXR) + ZONE_PAD;
-        const maxy = Math.max(...allYB) + ZONE_PAD;
-        bounds[z.id] = { x: minx, y: miny, w: maxx - minx, h: maxy - miny };
-      }
+          const LABEL_BAND = ZONE_H + 10;            // Platz oben fürs Zonen-Label
+          const allX  = hostsInZone.map(h => h.x);
+          const allY  = hostsInZone.map(h => h.y);
+          const allXR = hostsInZone.map(h => h.x + HOST_W);
+          const allYB = hostsInZone.map(h => h.y + HOST_H);
+          const minx = Math.min(...allX) - ZONE_PAD;
+          const miny = Math.min(...allY) - ZONE_PAD - LABEL_BAND;
+          const maxx = Math.max(...allXR) + ZONE_PAD;
+          const maxy = Math.max(...allYB) + ZONE_PAD;
+          bounds[z.id] = { x: minx, y: miny, w: maxx - minx, h: maxy - miny };
+        }
     });
     return bounds;
   }, [state.zones, state.hosts]);
@@ -286,26 +287,28 @@ export default function TopologyCanvas({ state, setState, mode, connectFrom, set
 
       {/* Zone labels */}
       {state.zones.map(z => {
-        const isSelected = selectedId === z.id;
-        return (
-          <g key={z.id} style={{ cursor: mode === "select" ? "grab" : "pointer" }}
-            onMouseDown={(e) => onMouseDown(e, z.id, "zone")}>
-            <rect x={z.x} y={z.y} width={ZONE_W} height={ZONE_H} rx="8"
-              fill={z.color} fillOpacity={isSelected ? "0.35" : "0.22"}
-              stroke={isSelected ? "#FFD700" : z.color}
-              strokeWidth={isSelected ? 3 : (connectFrom?.id === z.id ? 2.5 : 0.5)}
-              strokeDasharray={isSelected ? "none" : "none"}/>
-            {isSelected && (
-              <rect x={z.x - 4} y={z.y - 4} width={ZONE_W + 8} height={ZONE_H + 8} rx="10"
-                fill="none" stroke="#FFD700" strokeWidth="1.5" strokeDasharray="4 3" opacity="0.8"/>
-            )}
-            <text x={z.x + ZONE_W/2} y={z.y + ZONE_H/2 + 1} textAnchor="middle" dominantBaseline="central"
-              fontSize="12" fontWeight={isSelected ? "600" : "500"} fill={z.color} fontFamily="inherit">
-              {z.name}
-            </text>
-          </g>
-        );
-      })}
+          const isSelected = selectedId === z.id;
+          const b = zoneBounds[z.id];
+          const lx = b ? b.x + b.w / 2 - ZONE_W / 2 : z.x;
+          const ly = b ? b.y + 5 : z.y;
+          return (
+            <g key={z.id} style={{ cursor: mode === "select" ? "grab" : "pointer" }}
+              onMouseDown={(e) => onMouseDown(e, z.id, "zone")}>
+              <rect x={lx} y={ly} width={ZONE_W} height={ZONE_H} rx="8"
+                fill={z.color} fillOpacity={isSelected ? "0.35" : "0.22"}
+                stroke={isSelected ? "#FFD700" : z.color}
+                strokeWidth={isSelected ? 3 : (connectFrom?.id === z.id ? 2.5 : 0.5)}/>
+              {isSelected && (
+                <rect x={lx - 4} y={ly - 4} width={ZONE_W + 8} height={ZONE_H + 8} rx="10"
+                  fill="none" stroke="#FFD700" strokeWidth="1.5" strokeDasharray="4 3" opacity="0.8"/>
+              )}
+              <text x={lx + ZONE_W/2} y={ly + ZONE_H/2 + 1} textAnchor="middle" dominantBaseline="central"
+                fontSize="12" fontWeight={isSelected ? "600" : "500"} fill={z.color} fontFamily="inherit">
+                {z.name}
+              </text>
+            </g>
+          );
+        })}
 
       {/* Hosts */}
       {state.hosts.map(h => {

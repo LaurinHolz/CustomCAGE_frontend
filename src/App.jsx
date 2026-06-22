@@ -1,5 +1,8 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import {CAGE2_PRESET, makeEmpty} from "./data/cage2Preset";
+import { CAGE2_HALVED_PRESET } from "./data/cage2_05_preset.js";
+import { CAGE2_075_PRESET} from "./data/cage2_075_preset.js";
+import { CAGE2_125_PRESET} from "./data/cage2_125_preset.js";
 import {S} from "./styles/styles"
 import { HOST_W, HOST_H, ZONE_W, ZONE_H, ZONE_PAD } from "./constants/layout";
 import { uid } from "./utils/ids";
@@ -65,13 +68,22 @@ export default function App() {
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2000); };
 
   const loadPreset = (val) => {
-    if (val === "cage2") {
-      setState(JSON.parse(JSON.stringify(CAGE2_PRESET)));
-      showToast("Loaded CAGE-2 preset");
-    } else if (val === "empty") {
-      setState(makeEmpty());
-      showToast("Loaded empty canvas");
-    }
+  if (val === "cage2") {
+    setState(JSON.parse(JSON.stringify(CAGE2_PRESET)));
+    showToast("Loaded CAGE-2 preset");
+  } else if (val === "cage2_halved") {
+    setState(JSON.parse(JSON.stringify(CAGE2_HALVED_PRESET)));
+    showToast("Loaded 0.5x CAGE-2 preset");
+  } else if (val === "cage2_075") {
+    setState(JSON.parse(JSON.stringify(CAGE2_075_PRESET)));
+    showToast("Loaded 0.75x CAGE-2 preset");
+  } else if (val === "cage2_125") {
+    setState(JSON.parse(JSON.stringify(CAGE2_125_PRESET)));
+    showToast("Loaded 1.25x CAGE-2 preset")
+  } else if (val === "empty") {
+    setState(makeEmpty());
+    showToast("Loaded empty canvas");
+  }
     setSelectedItem(null);
     setConnectFrom(null);
     setMode("select");
@@ -238,6 +250,9 @@ export default function App() {
           <label style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>Preset:</label>
           <select style={S.select} onChange={e => loadPreset(e.target.value)} defaultValue="cage2">
             <option value="cage2">CAGE-2 Original</option>
+            <option value="cage2_halved">0.5x CAGE-2</option>
+            <option value="cage2_075">0.75x CAGE-2</option>
+            <option value="cage2_125">1.25x CAGE-2</option>
             <option value="empty">Empty (Custom)</option>
           </select>
           <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleDownload}>Download JSON</button>

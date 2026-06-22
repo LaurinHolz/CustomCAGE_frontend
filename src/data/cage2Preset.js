@@ -15,27 +15,30 @@ const RULES = [
 
 // ── Entities ─────────────────────────────────────────────────────────────────
 const ENTITIES = [
-  { name: "def",     priority: 2, services: ["Brute"],                                       decoys: [] },
-  { name: "ent0",    priority: 2, services: ["Brute"],                                       decoys: ["Haraka","Tomcat","Vsftpd","Apache"] },
-  { name: "ent1",    priority: 2, services: ["Brute","Eternal","Keep","HTTPRFI","HTTPSRFI"],  decoys: ["Femitter"] },
-  { name: "ent2",    priority: 2, services: ["Brute"],                                       decoys: ["Femitter"] },
-  { name: "ophost0", priority: 1, services: ["Brute"],                                       decoys: [] },
-  { name: "ophost1", priority: 1, services: ["Brute"],                                       decoys: [] },
-  { name: "ophost2", priority: 1, services: ["Brute"],                                       decoys: [] },
-  { name: "opserv",  priority: 3, services: ["Brute"],                                       decoys: ["Haraka","Apache","Tomcat","Vsftpd"] },
-  { name: "user0",   priority: 1, services: [],                                              decoys: [] },
-  { name: "user1",   priority: 1, services: ["Brute","FTP"],                                 decoys: ["Apache","Tomcat","SMSS","Svchost"] },
-  { name: "user2",   priority: 1, services: ["Eternal","Keep"],                              decoys: ["Femitter","Tomcat","Apache","SSHD"] },
-  { name: "user3",   priority: 1, services: ["Keep","HTTPSRFI","HTTPRFI","Haraka"],           decoys: ["Vsftpd","SSHD"] },
-  { name: "user4",   priority: 1, services: ["Keep","HTTPSRFI","HTTPRFI","Haraka","SQL"],     decoys: ["Vsftpd"] },
+  { name: "def",     priority: 2, services: ["Brute"],                                      decoys: [] },
+
+  { name: "ent0",    priority: 2, services: ["Brute"],                                      decoys: ["Apache","Tomcat","Vsftpd","Haraka"] },
+  { name: "ent1",    priority: 2, services: ["HTTPSRFI","HTTPRFI","Eternal","Keep","Brute"], decoys: ["Femitter"] },
+  { name: "ent2",    priority: 2, services: ["Brute"],                                      decoys: ["Femitter"] },
+
+  { name: "ophost0", priority: 1, services: ["Brute"],                                      decoys: ["Vsftpd","Haraka","Tomcat","Apache"] },
+  { name: "ophost1", priority: 1, services: ["Brute"],                                      decoys: ["Vsftpd","Haraka","Tomcat","Apache"] },
+  { name: "ophost2", priority: 1, services: ["Brute"],                                      decoys: ["Vsftpd","Haraka","Tomcat","Apache"] },
+  { name: "opserv",  priority: 3, services: ["Brute"],                                      decoys: ["Vsftpd","Haraka","Tomcat","Apache"] },
+
+  { name: "user0",   priority: 1, services: ["FTP","Brute"],                                decoys: ["Svchost","SMSS","Apache","Tomcat"] },
+  { name: "user1",   priority: 1, services: ["FTP","Brute"],                                decoys: ["Svchost","SMSS","Apache","Tomcat"] },
+  { name: "user2",   priority: 1, services: ["Eternal","Keep"],                             decoys: ["SSHD","Apache","Tomcat","Femitter"] },
+  { name: "user3",   priority: 1, services: ["Haraka","SQL","HTTPSRFI","HTTPRFI","Keep"],    decoys: ["SSHD","Vsftpd"] },
+  { name: "user4",   priority: 1, services: ["Haraka","SQL","HTTPSRFI","HTTPRFI","Keep"],    decoys: ["Vsftpd"] },
 ];
 
 // ── Attack connectivity ───────────────────────────────────────────────────────
 // Parallel to ENTITIES: which entities this entity can attack (by display name).
 const CONNECTED_HOSTS = [
   null,       // def
-  ["ent2"],   // ent0   → ent2
-  ["ent2"],   // ent1   → ent2
+  ["ent2","ent1"],   // ent0   → ent2
+  ["ent2","ent0"],   // ent1   → ent2
   ["opserv"], // ent2   → opserv (gateway to target)
   null,       // ophost0
   null,       // ophost1
