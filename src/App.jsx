@@ -18,8 +18,10 @@ import LiveFilePlots from "./components/LiveFilePlots";
 import WatchdogAveragesTable from "./components/WatchdogAveragesTable";
 import VerificationTree from "./components/VerificationTree";
 import VerificationProperties from "./components/VerificationProperties";
+import VerificationStatistics from "./components/VerificationStatistic";
 import VerificationResults from "./components/VerificationResults";
 import EvaluateModal from "./components/EvaluateModal";
+import VerifyModal from "./components/VerificationConfig";
 import TrainModal from "./components/TrainModal";
 import ToggleSwitch from "./components/ToggleSwitch";
 
@@ -27,6 +29,7 @@ const VERIFICATION_OPTIONS = [
   { key: "bfs", label: "BFS" },
   { key: "properties", label: "Properties" },
   { key: "results", label: "Results" },
+  { key: "statistics", label: "Statistics"},
 ];
 
 // ─── Main App ─────────────────────────────────────────────────────
@@ -50,6 +53,7 @@ export default function App() {
   }, [theme]);
   const [visualizerOn, setVisualizerOn] = useState(false);
   const [evalModalOpen, setEvalModalOpen] = useState(false);
+  const [verifyModalOpen, setVerifyModalOpen] = useState(false);
   const [evalState, setEvalState] = useState("idle"); // "idle" | "running" | "done"
   const [verifySignal, setVerifySignal] = useState(0);
   const [verificationView, setVerificationView] = useState("bfs");
@@ -183,20 +187,7 @@ export default function App() {
 
   const handleEvaluate = () => setEvalModalOpen(true);
 
-  const handleVerify = async () => {
-    try {
-      const res = await fetch("http://127.0.0.1:9999/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(backendData),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setVerifySignal((n) => n + 1);
-      showToast("Verification started ✓");
-    } catch (err) {
-      showToast(`Failed: ${err.message}`);
-    }
-  };
+  const handleVerify = () => setVerifyModalOpen(true);
 
   const runEvaluate = async ({ ckptPath, numEpisodes, maxTimesteps }) => {
     try {
@@ -218,6 +209,30 @@ export default function App() {
       showToast(`Failed: ${err.message}`);
     }
   };
+
+  const runVerify = async ({ ckptPath, topK, partialObservability, fvApproach }) => {
+  try {
+    const params = new URLSearchParams();
+    if (ckptPath) params.set("ckpt_path", ckptPath);
+    params.set("top_k", String(topK));
+    params.set("partial_observability", String(partialObservability));
+    params.set("fv_approach", fvApproach);
+
+    const res = await fetch(`http://127.0.0.1:9999/verify?${params.toString()}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(backendData),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    setVerifyModalOpen(false);
+    setVerifySignal((n) => n + 1);
+    setTab("verification");
+    setVerificationView("bfs");   // BFS-Tree zeigen, damit der Fortschritt sichtbar ist
+    showToast("Verification started ✓");
+  } catch (err) {
+    showToast(`Failed: ${err.message}`);
+  }
+};
 
   const handleToggleVisualizer = async () => {
     const enabled = !visualizerOn;
@@ -464,6 +479,9 @@ export default function App() {
         <div style={{ display: verificationView === "results" ? "block" : "none" }}>
           <VerificationResults />
         </div>
+        <div style={{ display: verificationView === "statistics" ? "block" : "none" }}>
+          <VerificationStatistics />
+        </div>
       </div>
 
 
@@ -478,6 +496,13 @@ export default function App() {
         <EvaluateModal
           onClose={() => setEvalModalOpen(false)}
           onRun={runEvaluate}
+        />
+      )}
+
+      {verifyModalOpen && (
+        <VerifyModal
+          onClose={() => setVerifyModalOpen(false)}
+          onVerify={runVerify}
         />
       )}
     </div>

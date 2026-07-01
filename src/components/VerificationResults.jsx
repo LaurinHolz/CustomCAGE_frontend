@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useMemo, useState } from "react";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 import { S } from "../styles/styles";
+import { PCTL_RULES } from "../data/pctl_rules";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -24,7 +25,7 @@ ChartJS.register(
 
 const BASE = "http://127.0.0.1:9999";
 
-// ── PRISM → LaTeX converter ────────────────────────────────────────────────────
+// ── PRISM → LaTeX converter (fallback rendering of raw formulas) ────────────────
 
 function prismToLatex(formula) {
   let s = formula;
@@ -55,12 +56,110 @@ function prismToLatex(formula) {
   return s;
 }
 
-function probColor(formula, prob) {
-  if (/P=\?\s*\[\s*F\b/.test(formula))
-    return prob < 0.05 ? "#1D9E75" : prob > 0.8 ? "#E24B4A" : "#E0A458";
-  if (/P=\?\s*\[\s*G\b/.test(formula))
-    return prob > 0.95 ? "#1D9E75" : prob < 0.3 ? "#E24B4A" : "#E0A458";
-  return "#f5f5f5";
+// ── Curated rule rendering (matches the Properties tab) ─────────────────────────
+
+const CATEGORY_STYLE = {
+  "Safety / Reachability": { color: "#E0A458", bg: "rgba(224,164,88,0.14)", border: "rgba(224,164,88,0.4)" },
+  "Response / Robustness": { color: "#3FE0A8", bg: "rgba(29,158,117,0.14)", border: "rgba(29,158,117,0.4)" },
+};
+
+function CategoryBadge({ category }) {
+  const c = CATEGORY_STYLE[category] || { color: "var(--color-text-secondary)", bg: "rgba(255,255,255,0.06)", border: "rgba(255,255,255,0.16)" };
+  return (
+    <span style={{
+      display: "inline-block", padding: "4px 10px", borderRadius: 999,
+      fontSize: 11, fontWeight: 600, whiteSpace: "nowrap",
+      color: c.color, background: c.bg, border: `1px solid ${c.border}`,
+    }}>
+      {category}
+    </span>
+  );
+}
+
+// Renders the curated PCTL (paper notation) from PCTL_RULES[i].pctl — identical
+// to the Properties tab's <Pctl> component.
+function CuratedPctl({ tex }) {
+  const html = useMemo(
+    () => katex.renderToString(tex, { throwOnError: false, displayMode: false }),
+    [tex]
+  );
+  return <span style={curatedPctl} dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
+// ── Structural fallback (only used when no curated rule exists at this index) ───
+// Derived purely from the formula shape — never asserts what a state number means.
+function classifyProperty(formula) {
+  let m = formula.match(/^P=\?\s*\[\s*F\s*"(\w+)_state(\d+)"\s*\]$/);
+  if (m) {
+    return { category: "Safety / Reachability", label: `Attacker reaches ${m[1]} · state ${m[2]}` };
+  }
+  if (/^P=\?\s*\[\s*G\b/.test(formula) && /!\("\w+_state5"\s*&\s*"\w+_state5"\)/.test(formula)) {
+    return { category: "Safety / Reachability", label: "No two hosts compromised simultaneously" };
+  }
+  const bounded = formula.match(/true\s+U<=(\d+)/g);
+  if (/^P=\?\s*\[\s*G\b/.test(formula) && bounded) {
+    const k = (formula.match(/U<=(\d+)/) || [])[1];
+    const host = (formula.match(/!\("(\w+)_state5"/) || [])[1];
+    return {
+      category: "Response / Robustness",
+      label: bounded.length > 1 ? `All ${bounded.length} user hosts restored within ${k} steps`
+                                : `${host || "host"} restored within ${k} steps`,
+    };
+  }
+  const next = formula.match(/\bX\s*"/g);
+  if (/^P=\?\s*\[\s*G\b/.test(formula) && next) {
+    const host = (formula.match(/!\("(\w+)_state4"/) || [])[1];
+    return {
+      category: "Response / Robustness",
+      label: next.length > 1 ? `All ${next.length} servers restored in next step`
+                             : `${host || "host"} restored in next step`,
+    };
+  }
+  const isF = /\[\s*F\b/.test(formula);
+  return { category: isF ? "Safety / Reachability" : "Response / Robustness",
+           label: isF ? "Reachability property" : "Invariant property" };
+}
+
+// ── Verdict (direction-aware, derived from the raw formula + its probability) ───
+
+const VERDICT_STYLE = {
+  pass:      { sym: "✓", word: "satisfied", color: "#3FE0A8" },
+  marginal:  { sym: "⚠", word: "marginal",  color: "#E0A458" },
+  violation: { sym: "✗", word: "violated",  color: "#E24B4A" },
+  unknown:   { sym: "–", word: "n/a",        color: "var(--color-text-secondary)" },
+};
+
+// F-reachability of a *bad* state → holds when prob is low → pSat = 1 - prob
+// G-invariant that should *always* hold → holds when prob is high → pSat = prob
+function verdictOf(formula, prob) {
+  const isReach = /\[\s*F\b/.test(formula);
+  const pSat = isReach ? 1 - prob : prob;     // satisfaction probability
+  const pViol = 1 - pSat;                     // violation probability
+  let status;
+  if (!Number.isFinite(prob)) status = "unknown";
+  else if (pSat >= 0.95) status = "pass";       // ── tune these thresholds once stochastic
+  else if (pSat <= 0.50) status = "violation";  //    (top-k) / partial-obs runs yield fractions
+  else status = "marginal";
+  return { status, pSat, pViol, rawProb: prob, color: VERDICT_STYLE[status].color };
+}
+
+function Verdict({ v }) {
+  const s = VERDICT_STYLE[v.status];
+  // Headline number always pairs naturally with the symbol:
+  //   pass / marginal → satisfaction probability (≈1 for a clean pass)
+  //   violation       → violation probability
+  const headline = v.status === "violation" ? v.pViol : v.pSat;
+  return (
+    <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: s.color, fontWeight: 700 }}>
+        <span style={{ fontSize: 15, lineHeight: 1 }}>{s.sym}</span>
+        <span style={{ fontSize: 12 }}>{s.word}</span>
+      </span>
+      <span style={{ fontSize: 12, fontFamily: "var(--font-mono)", fontWeight: 700, color: s.color }}>
+        {Number.isFinite(headline) ? headline.toFixed(4) : "—"}
+      </span>
+    </div>
+  );
 }
 
 function parseProperty(line) {
@@ -90,6 +189,7 @@ function formatFull(formula) {
     .replace(/\s*\|\s*/g, " ∨ ");
 }
 
+// Raw formula renderer — only used as fallback when there is no curated rule.
 function PrismFormula({ formula }) {
   const [expanded, setExpanded] = useState(false);
   const isLong = formula.length > LONG_LIMIT;
@@ -123,38 +223,54 @@ function PrismFormula({ formula }) {
 function PropertyList({ text }) {
   const props = text.split("\n").map(l => l.trim()).filter(Boolean).map(parseProperty).filter(Boolean);
   if (!props.length) return null;
+
   return (
     <div style={propCard}>
       <table style={propTable}>
         <thead>
           <tr>
             <th style={propTh}>#</th>
-            <th style={propTh}>PCTL Formula</th>
-            <th style={{ ...propTh, textAlign: "right" }}>Result</th>
+            <th style={propTh}>Property</th>
+            <th style={propTh}>Category</th>
+            <th style={propTh}>PCTL Logic</th>
+            <th style={{ ...propTh, textAlign: "right" }}>Verdict</th>
           </tr>
         </thead>
         <tbody>
-          {props.map((p) => {
-            const color = probColor(p.formula, p.prob);
-            const probStr = isNaN(p.prob) ? p.probStr : p.prob.toFixed(4);
+          {props.map((p, i) => {
+            // ── Variant A: order-based join. Result row i ⇄ PCTL_RULES[i].
+            // Assumes build_property_lines() emits properties in the SAME order
+            // as PCTL_RULES. If a property class is ever dropped (e.g. no user
+            // hosts), indices shift — that's the known trade-off. When no rule
+            // exists at this index we fall back to structural classification.
+            const rule = PCTL_RULES[i];
+            const fallback = rule ? null : classifyProperty(p.formula);
+
+            const idx      = rule ? rule.idx      : p.index;
+            const label    = rule ? rule.property : fallback.label;
+            const category = rule ? rule.category : fallback.category;
+            const v = verdictOf(p.formula, p.prob);
+
             return (
               <tr
                 key={p.index}
                 onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.03)"; }}
                 onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
               >
-                <td style={{ ...propTd, width: 44 }}>
-                  <span style={{ ...propIdxBadge, color, borderColor: color }}>
-                    {p.index}
+                <td style={{ ...propTd, width: 52 }}>
+                  <span style={{ ...propIdxBadge, color: v.color, borderColor: v.color }}>
+                    {idx}
                   </span>
                 </td>
-                <td style={propTd}>
-                  <PrismFormula formula={p.formula} />
+                <td style={{ ...propTd, minWidth: 240 }}>{label}</td>
+                <td style={propTd}><CategoryBadge category={category} /></td>
+                {/* title = the actual formula that was checked, so the order-join
+                    can be verified at a glance on hover. */}
+                <td style={propTd} title={p.formula}>
+                  {rule ? <CuratedPctl tex={rule.pctl} /> : <PrismFormula formula={p.formula} />}
                 </td>
                 <td style={{ ...propTd, textAlign: "right", whiteSpace: "nowrap" }}>
-                  <span style={{ color, fontWeight: 700, fontFamily: "var(--font-mono)", fontSize: 13 }}>
-                    {probStr}
-                  </span>
+                  <Verdict v={v} />
                 </td>
               </tr>
             );
@@ -353,7 +469,7 @@ export default function VerificationResults() {
         )}
 
         <div style={sectionHeader}>
-          <span style={sectionLabel}>Safety / Reachability Properties</span>
+          <span style={sectionLabel}>Checked Properties</span>
         </div>
         {propertiesText ? (
           <PropertyList text={propertiesText} />
@@ -480,6 +596,16 @@ const propIdxBadge = {
   fontFamily: "var(--font-mono, ui-monospace, monospace)",
   background: "rgba(255,255,255,0.07)",
   border: "1px solid",
+};
+
+const curatedPctl = {
+  display: "inline-block",
+  fontSize: 15,
+  color: "var(--color-text-primary)",
+  background: "rgba(255,255,255,0.04)",
+  border: "1px solid rgba(255,255,255,0.07)",
+  borderRadius: 8,
+  padding: "8px 12px",
 };
 
 const runningBanner = {
