@@ -151,7 +151,7 @@ export default function App() {
     showToast("JSON downloaded");
   };
 
-  const runTrain = async ({ ckptDir, ckptPath, startEpisode, maxEpisodes, maxTimesteps, makeVideo }) => {
+  const runTrain = async ({ ckptDir, ckptPath, startEpisode, maxEpisodes, maxTimesteps, makeVideo, redTeam }) => {
     try {
       const params = new URLSearchParams();
       params.set("ckpt_dir", ckptDir);
@@ -159,6 +159,7 @@ export default function App() {
       params.set("start_episode", String(startEpisode));
       params.set("max_episodes", String(maxEpisodes));
       params.set("max_timesteps", String(maxTimesteps));
+      params.set("red_team", JSON.stringify(redTeam || []));
 
       const res = await fetch(`http://127.0.0.1:9999?${params}`, {
         method: "POST",
