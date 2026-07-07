@@ -40,6 +40,12 @@ function shortKind(n) {
 }
 
 export function describe(m, ctx) {
+  const d = _describeKind(m, ctx);
+  const custom = (m.name || "").trim();
+  return custom ? { ...d, label: custom } : d;
+}
+
+function _describeKind(m, ctx) {
   if (m.kind === "ref") {
     const info = ctx?.trainedLabelById?.[m.refNodeId];
     return { icon: "🎓", label: info?.label || "Trained output",
@@ -253,7 +259,15 @@ function edgePath(sx, sy, ds, tx, ty, dt) {
   return `M ${sx} ${sy} C ${sx + ds * dx} ${sy}, ${tx + dt * dx} ${ty}, ${tx} ${ty}`;
 }
 
-export default function CurriculumEditor({ initialCurriculum, onApply, onClose }) {
+export default function CurriculumEditor({ initialCurriculum, hostCount, onApply, onClose }) {
+  // Recommended PPO input-dims for the current topology, per role:
+  //   blue observation = 6 × hosts   (activity+safety per host, scan, decoy)
+  //   red observation  = 1 + 3 × hosts (red_success + per-host state)
+  const recFor = (role) => {
+    const h = hostCount || 0;
+    if (h < 1) return role === "defender" ? 78 : 40;
+    return role === "defender" ? 6 * h : 1 + 3 * h;
+  };
   const init = initialCurriculum && initialCurriculum.phases?.length ? initialCurriculum : DEFAULT_CURRICULUM;
   const [phases, setPhases]         = useState(init.phases);
   const [nodes, setNodes]           = useState(init.nodes);
@@ -399,7 +413,7 @@ export default function CurriculumEditor({ initialCurriculum, onApply, onClose }
     const id = nid();
     // The trained side defaults to "from scratch"; a fixed opponent starts blank.
     const trains = phasesById[phaseId]?.trainingSide === role;
-    setNodes((ns) => [...ns, { id, phaseId, role, kind: trains ? "scratch" : "unconfigured", dims: 78 }]);
+    setNodes((ns) => [...ns, { id, phaseId, role, kind: trains ? "scratch" : "unconfigured", dims: recFor(role) }]);
     setSelectedNodeId(id);
   };
   const removeNode = (id) => {
@@ -453,6 +467,10 @@ export default function CurriculumEditor({ initialCurriculum, onApply, onClose }
   const run = deriveRun(cur);
   const runnable = run.members.some((m) => m.team === "blue") && run.members.some((m) => m.team === "red");
   const canApply = phases.length >= 1 && allConfigured && runnable;
+  // Training jobs = each node sitting on its phase's training side.
+  const trainJobs = nodes.filter((n) => phasesById[n.phaseId]?.trainingSide === n.role);
+  const defenderJobs = trainJobs.filter((n) => n.role === "defender").length;
+  const attackerJobs = trainJobs.length - defenderJobs;
   const handleApply = () => { if (canApply) onApply({ members: run.members, curriculum: cur }); };
 
   const ghostFrom = ghost && inter.current
@@ -607,6 +625,19 @@ export default function CurriculumEditor({ initialCurriculum, onApply, onClose }
                 </div>
                 <div style={S.inspBody}>
                   <div>
+                    <div style={S.label}>Name</div>
+                    <input
+                      style={{ ...S.dimsInput, width: "100%" }}
+                      placeholder={describe({ ...selected, name: "" }, { trainedLabelById, phasesById }).label}
+                      value={selected.name || ""}
+                      onChange={(e) => patch(selected.id, { name: e.target.value })}
+                    />
+                    <p style={{ margin: "6px 0 0 0", fontSize: 10.5, color: TEXT_SECONDARY }}>
+                      Names its folder &amp; checkpoint. Leave blank to auto-name from its source.
+                    </p>
+                  </div>
+
+                  <div>
                     <div style={S.label}>Role</div>
                     <div style={S.segment}>
                       <button style={S.segBtn(BLUE, selected.role === "defender")} onClick={() => setRole("defender")}>🛡️ Defender</button>
@@ -674,7 +705,8 @@ export default function CurriculumEditor({ initialCurriculum, onApply, onClose }
 
                   {(selected.role === "attacker" || selected.kind === "ppo") && (
                     <div>
-                      {selected.role === "attacker" && <div style={S.label}>PPO checkpoint</div>}
+                      {(selected.role === "attacker" || selected.kind === "ppo") &&
+                        <div style={S.label}>{selected.role === "attacker" ? "PPO checkpoint" : "Checkpoint"}</div>}
                       <div style={S.ckptBox(selected.kind === "ppo" && !!selected.ckpt)}>
                         {selected.kind === "ppo" && selected.ckpt
                           ? <span style={S.ckptPath}>{selected.ckpt}</span>
@@ -684,12 +716,29 @@ export default function CurriculumEditor({ initialCurriculum, onApply, onClose }
                         <button style={S.browseBtn} onClick={() => setBrowsing(true)}>
                           {selected.kind === "ppo" && selected.ckpt ? "Change checkpoint…" : "Browse for checkpoint…"}
                         </button>
-                        {selected.role === "attacker" && selected.kind === "ppo" && (
-                          <div style={S.dimsRow}>
-                            <span style={S.dimsLabel}>Input dims</span>
-                            <input style={S.dimsInput} type="number" min="1" step="1" value={selected.dims ?? ""}
-                              onChange={(e) => patch(selected.id, { dims: e.target.value })}
-                              title="Observation dimensions the checkpoint expects" />
+                        {selected.kind === "ppo" && (
+                          <div>
+                            <div style={S.dimsRow}>
+                              <span style={S.dimsLabel}>Input dims</span>
+                              <input style={S.dimsInput} type="number" min="1" step="1" value={selected.dims ?? ""}
+                                onChange={(e) => patch(selected.id, { dims: e.target.value })}
+                                title="Observation dimensions the checkpoint expects" />
+                              {Number(selected.dims) !== recFor(selected.role) && (
+                                <button
+                                  style={{ ...S.dimsLabel, cursor: "pointer", border: `1px solid ${REF}55`,
+                                           background: `${REF}1f`, color: REF, borderRadius: 8, padding: "6px 9px",
+                                           fontFamily: "inherit", fontWeight: 700 }}
+                                  onClick={() => patch(selected.id, { dims: recFor(selected.role) })}
+                                  title="Set to the recommended value for this topology">
+                                  use {recFor(selected.role)}
+                                </button>
+                              )}
+                            </div>
+                            <p style={{ margin: "6px 0 0 0", fontSize: 10.5, color: TEXT_SECONDARY }}>
+                              Recommended for this topology: <strong>{recFor(selected.role)}</strong>{" "}
+                              ({selected.role === "defender" ? "6 × hosts" : "1 + 3 × hosts"}). Override for a
+                              checkpoint trained on a different observation size.
+                            </p>
                           </div>
                         )}
                       </div>
@@ -724,7 +773,7 @@ export default function CurriculumEditor({ initialCurriculum, onApply, onClose }
         <div style={S.footer}>
           <span style={S.footHint}>
             {canApply
-              ? `Ready — “Start training” will run the first phase’s matchup (${run.members.filter((m) => m.team === "red").length} attacker(s)).`
+              ? `Ready — ${trainJobs.length} matchup(s) train in chain order (${defenderJobs} defender, ${attackerJobs} attacker).`
               : !allConfigured ? "Finish configuring every node (missing checkpoint or dims)."
               : "The first phase needs at least one defender and one attacker to run."}
           </span>
@@ -735,7 +784,7 @@ export default function CurriculumEditor({ initialCurriculum, onApply, onClose }
 
       {browsing && selected && (
         <FileBrowserModal mode="file" initialPath={selected.ckpt || ""}
-          onSelect={(path) => { patch(selected.id, { kind: "ppo", key: undefined, ckpt: path, dims: selected.dims ?? 78 }); setBrowsing(false); }}
+          onSelect={(path) => { patch(selected.id, { kind: "ppo", key: undefined, ckpt: path, dims: selected.dims ?? recFor(selected.role) }); setBrowsing(false); }}
           onClose={() => setBrowsing(false)} />
       )}
     </div>

@@ -111,12 +111,12 @@ function inferEpisode(name) {
   return m ? parseInt(m[1], 10) : null;
 }
 
-export default function TrainModal({ onClose, onRun }) {
+export default function TrainModal({ onClose, onRun, hostCount }) {
   const [curriculum, setCurriculum] = useState(DEFAULT_CURRICULUM);
   const [editorOpen, setEditorOpen] = useState(false);
   const members = deriveRun(curriculum).members;
 
-  const [ckptDir, setCkptDir]                 = useState("meander_ppo");
+  const [ckptDir, setCkptDir]                 = useState("output");
   const [saveDirOverride, setSaveDirOverride] = useState("");
 
   const [maxEpisodes, setMaxEpisodes]   = useState(100000);
@@ -159,13 +159,11 @@ export default function TrainModal({ onClose, onRun }) {
   const handleRun = () => {
     if (!canRun) return;
     onRun({
+      curriculum,
       ckptDir:      saveDir,
-      ckptPath:     blueCkptPath,
-      startEpisode: mode === "continue" ? startEpisode : 1,
       maxEpisodes:  maxEp,
       maxTimesteps: Math.max(1, parseInt(maxTimesteps, 10) || 100),
       makeVideo,
-      redTeam,
     });
   };
 
@@ -187,7 +185,7 @@ export default function TrainModal({ onClose, onRun }) {
 
           {/* ── Curriculum summary + editor launcher ── */}
           <div>
-            <div style={styles.sectionLabel}>Curriculum · first-phase matchup</div>
+            <div style={styles.sectionLabel}>Curriculum · first matchup preview</div>
             <div style={styles.teamsCard}>
               {/* Blue */}
               <div style={styles.teamRow}>
@@ -236,7 +234,7 @@ export default function TrainModal({ onClose, onRun }) {
             </div>
             <p style={styles.hint}>
               {curriculum.phases.length > 1
-                ? `${curriculum.phases.length} phases authored — training runs the first phase's matchup for now.`
+                ? `${curriculum.phases.length} phases — trained in chain order, each checkpoint fed to its downstream matchups.`
                 : redMembers.length > 1
                   ? "One attacker is drawn at random from the pool each episode."
                   : "Author phases and matchups in the editor."}
@@ -250,7 +248,7 @@ export default function TrainModal({ onClose, onRun }) {
               <div style={styles.inputRow}>
                 <input
                   style={{ ...styles.input, flex: 1 }}
-                  placeholder="meander_ppo"
+                  placeholder="output"
                   value={ckptDir}
                   onChange={(e) => setCkptDir(e.target.value)}
                 />
@@ -350,6 +348,7 @@ export default function TrainModal({ onClose, onRun }) {
       {editorOpen && (
         <CurriculumEditor
           initialCurriculum={curriculum}
+          hostCount={hostCount}
           onApply={handleApplyTeams}
           onClose={() => setEditorOpen(false)}
         />

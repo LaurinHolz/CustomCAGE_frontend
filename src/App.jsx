@@ -151,20 +151,18 @@ export default function App() {
     showToast("JSON downloaded");
   };
 
-  const runTrain = async ({ ckptDir, ckptPath, startEpisode, maxEpisodes, maxTimesteps, makeVideo, redTeam }) => {
+  const runTrain = async ({ curriculum, ckptDir, maxEpisodes, maxTimesteps, makeVideo }) => {
     try {
-      const params = new URLSearchParams();
-      params.set("ckpt_dir", ckptDir);
-      if (ckptPath) params.set("ckpt_path", ckptPath);
-      params.set("start_episode", String(startEpisode));
-      params.set("max_episodes", String(maxEpisodes));
-      params.set("max_timesteps", String(maxTimesteps));
-      params.set("red_team", JSON.stringify(redTeam || []));
-
-      const res = await fetch(`http://127.0.0.1:9999?${params}`, {
+      const res = await fetch("http://127.0.0.1:9999/train-curriculum", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(backendData),
+        body: JSON.stringify({
+          config: backendData,
+          curriculum,
+          ckptDir,
+          maxEpisodes,
+          maxTimesteps,
+        }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setIsTraining(true);
@@ -491,6 +489,7 @@ export default function App() {
         <TrainModal
           onClose={() => setTrainModalOpen(false)}
           onRun={runTrain}
+          hostCount={state.hosts?.length || 0}
         />
       )}
       {evalModalOpen && (
