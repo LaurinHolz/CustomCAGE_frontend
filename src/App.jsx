@@ -23,6 +23,8 @@ import VerificationResults from "./components/VerificationResults";
 import EvaluateModal from "./components/EvaluateModal";
 import VerifyModal from "./components/VerificationConfig";
 import TrainModal from "./components/TrainModal";
+import TrainingJobsInfo from "./components/TrainingJobsInfo";
+import { fetchGpuInfo } from "./components/CurriculumEditor";
 import ToggleSwitch from "./components/ToggleSwitch";
 
 const VERIFICATION_OPTIONS = [
@@ -45,6 +47,9 @@ export default function App() {
   const [isTraining, setIsTraining]         = useState(false);
   const [screenshotsEnabled, setScreenshotsEnabled] = useState(false);
   const [trainModalOpen, setTrainModalOpen] = useState(false);
+  // Snapshot of what's being trained (curriculum + free GPUs + total episodes),
+  // captured at Train-click; drives the ⓘ jobs/progress panel in the header.
+  const [trainCtx, setTrainCtx] = useState(null);
   const [theme, setTheme] = useState(() => localStorage.getItem("aegis-theme") || "dark");
 
   useEffect(() => {
@@ -168,6 +173,10 @@ export default function App() {
       setIsTraining(true);
       setScreenshotsEnabled(!!makeVideo);
       setTrainModalOpen(false);
+      // Snapshot the free GPUs the backend will schedule against, so the ⓘ panel
+      // previews the same job→GPU distribution the run actually uses.
+      const gi = await fetchGpuInfo();
+      setTrainCtx({ curriculum, maxEpisodes, gpuFree: gi.free || [] });
       showToast("Training started ✓");
     } catch (err) {
       showToast(`Failed: ${err.message}`);
@@ -282,6 +291,7 @@ export default function App() {
             style={{ ...S.btn, ...(isTraining ? { background: '#E24B4A', color: '#fff', border: 'none' } : S.btnSuccess) }}
             onClick={isTraining ? handleStopTraining : () => setTrainModalOpen(true)}
           >{isTraining ? "Stop" : "Train"}</button>
+          <TrainingJobsInfo ctx={trainCtx} />
           <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleEvaluate}>Evaluate</button>
           <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleVerify}>Verify</button>
           <ToggleSwitch

@@ -85,6 +85,117 @@ function ancestorsOf(phaseId, phaseEdges) {
   return seen;
 }
 
+// Short display name of the agent a node represents — a custom name wins, a
+// "ref" inherits the label of the trained agent it continues (mirrors the
+// backend's curriculum_runner._node_label so previews match reality).
+export function nodeLabel(n, byId, seen) {
+  if (!n) return "agent";
+  const custom = (n.name || "").trim();
+  if (custom) return custom;
+  if (n.kind === "scripted") return RED_BY_KEY[n.key]?.name || n.key || "scripted";
+  if (n.kind === "ppo") return basename(n.ckpt) || "checkpoint";
+  if (n.kind === "ref") {
+    const s = seen || new Set();
+    const r = byId?.[n.refNodeId];
+    if (r && !s.has(n.refNodeId)) return nodeLabel(r, byId, new Set([...s, n.refNodeId]));
+    return "trained";
+  }
+  if (n.kind === "scratch") return "from scratch";
+  return "unconfigured";
+}
+
+// Opposite-role nodes linked to `nid` by a matchup arrow (either direction).
+function opponentsOf(nid, byId, edges) {
+  const linked = new Set();
+  edges.forEach((e) => { if (e.from === nid) linked.add(e.to); else if (e.to === nid) linked.add(e.from); });
+  const node = byId[nid];
+  return [...linked].map((i) => byId[i]).filter((o) => o && o.role !== node?.role);
+}
+
+// Phases in chain order (Kahn); leftovers/cycles keep input order.
+function phaseTopoOrder(phases, phaseEdges) {
+  const ids = phases.map((p) => p.id);
+  const idset = new Set(ids);
+  const indeg = {}, adj = {};
+  ids.forEach((i) => { indeg[i] = 0; adj[i] = []; });
+  phaseEdges.forEach((e) => {
+    if (idset.has(e.from) && idset.has(e.to)) { adj[e.from].push(e.to); indeg[e.to]++; }
+  });
+  const q = ids.filter((i) => indeg[i] === 0), order = [], seen = new Set();
+  while (q.length) {
+    const i = q.shift(); order.push(i); seen.add(i);
+    adj[i].forEach((j) => { if (--indeg[j] === 0) q.push(j); });
+  }
+  ids.forEach((i) => { if (!seen.has(i)) order.push(i); });
+  const byId = Object.fromEntries(phases.map((p) => [p.id, p]));
+  return order.map((i) => byId[i]);
+}
+
+/**
+ * Preview of how the curriculum's training jobs distribute across GPUs — the
+ * plan the backend scheduler realizes when Train is clicked: independent jobs
+ * run concurrently (one per free GPU) and dependents queue behind them.
+ *
+ * `gpuIds` is the snapshot of free GPU indices ([] → one sequential CPU lane).
+ * Jobs are walked in phase-chain order (a valid topological order, since a node
+ * only ever references a trained agent from an ancestor phase) and each is
+ * placed on the least-loaded lane, so the first N independent jobs land on N
+ * distinct GPUs. Returns { jobs, byNode } where each job carries its gpu, its
+ * 0-based queue position on that gpu, and the agents it depends on.
+ */
+export function planSchedule(cur, gpuIds) {
+  const { phases = [], nodes = [], edges = [], phaseEdges = [] } = cur || {};
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  const order = phaseTopoOrder(phases, phaseEdges);
+
+  const jobs = [];
+  order.forEach((ph) => {
+    nodes.filter((n) => n.phaseId === ph.id && n.role === ph.trainingSide)
+      .forEach((n) => jobs.push({ nodeId: n.id, phaseId: ph.id, phaseName: ph.name, role: n.role, node: n }));
+  });
+  const jobByNode = {};
+  jobs.forEach((j, i) => { jobByNode[j.nodeId] = i; });
+
+  jobs.forEach((j) => {
+    const refs = [];
+    if (j.node.kind === "ref") refs.push(j.node.refNodeId);
+    opponentsOf(j.nodeId, byId, edges).forEach((o) => { if (o.kind === "ref") refs.push(o.refNodeId); });
+    j.depNodeIds = refs.filter((r) => jobByNode[r] !== undefined && r !== j.nodeId);
+  });
+
+  const lanes = (gpuIds && gpuIds.length) ? gpuIds.map((g) => ({ gpu: g, count: 0 }))
+                                          : [{ gpu: null, count: 0 }];
+  jobs.forEach((j) => {
+    let li = 0;
+    for (let k = 1; k < lanes.length; k++) if (lanes[k].count < lanes[li].count) li = k;
+    j.laneIdx = li;
+    j.gpuId = lanes[li].gpu;
+    j.gpuLabel = lanes[li].gpu == null ? "CPU (sequential)" : `GPU ${lanes[li].gpu}`;
+    j.queuePos = lanes[li].count;
+    lanes[li].count++;
+  });
+
+  const out = jobs.map((j) => ({
+    nodeId: j.nodeId, phaseId: j.phaseId, phaseName: j.phaseName, role: j.role,
+    label: nodeLabel(j.node, byId),
+    depNodeIds: j.depNodeIds,
+    depLabels: j.depNodeIds.map((r) => nodeLabel(byId[r], byId)),
+    gpuId: j.gpuId, gpuLabel: j.gpuLabel, queuePos: j.queuePos, laneIdx: j.laneIdx,
+  }));
+  return { jobs: out, byNode: Object.fromEntries(out.map((j) => [j.nodeId, j])) };
+}
+
+// Fetch the live free-GPU snapshot the plan is built against.
+export async function fetchGpuInfo() {
+  try {
+    const res = await fetch("http://127.0.0.1:9999/gpu-info");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch {
+    return { cuda: false, count: 0, free: [] };
+  }
+}
+
 let _autoId = 1;
 const nid = () => `n${Date.now().toString(36)}${_autoId++}`;
 const pid = () => `p${Date.now().toString(36)}${_autoId++}`;
@@ -295,6 +406,12 @@ export default function CurriculumEditor({ initialCurriculum, hostCount, onApply
   // start "from scratch"; otherwise it's a fixed opponent (checkpoint / reuse).
   const selTrains = !!selected && phasesById[selected.phaseId]?.trainingSide === selected.role;
 
+  // Live free-GPU snapshot → a preview of how the jobs would be distributed.
+  const [gpuInfo, setGpuInfo] = useState(null);
+  useEffect(() => { fetchGpuInfo().then(setGpuInfo); }, []);
+  const schedulePlan = useMemo(() => planSchedule(cur, gpuInfo?.free || []), [cur, gpuInfo]);
+  const selJob = selected ? schedulePlan.byNode[selected.id] : null;
+
   // Every trained agent = a node sitting on its phase's training side. Each one
   // produces a distinct checkpoint downstream, so each gets a unique label.
   const trainedLabelById = useMemo(() => {
@@ -307,9 +424,11 @@ export default function CurriculumEditor({ initialCurriculum, hostCount, onApply
         const neigh = edges.filter((e) => e.from === n.id).map((e) => byId[e.to])
           .concat(edges.filter((e) => e.to === n.id).map((e) => byId[e.from])).filter(Boolean);
         const opp = neigh.length ? shortKind(neigh[0]) : null;
+        const custom = (n.name || "").trim();
         map[n.id] = {
-          label: `${ph.name} · ${roleCap} ${i + 1}`,
-          sub: `${shortKind(n)}${opp ? ` → ${opp}` : ""}`,
+          // A custom name flows downstream: a later ref to this agent shows it.
+          label: custom || `${ph.name} · ${roleCap} ${i + 1}`,
+          sub: `${ph.name} · ${shortKind(n)}${opp ? ` → ${opp}` : ""}`,
           role: n.role, phaseId: ph.id,
         };
       });
@@ -636,6 +755,54 @@ export default function CurriculumEditor({ initialCurriculum, hostCount, onApply
                       Names its folder &amp; checkpoint. Leave blank to auto-name from its source.
                     </p>
                   </div>
+
+                  {selTrains && selJob && (
+                    <div>
+                      <div style={S.label}>Scheduling</div>
+                      <div style={{
+                        display: "flex", flexDirection: "column", gap: 8, padding: 12,
+                        borderRadius: 12, border: "1px solid var(--modal-border)", background: "var(--surface-muted)",
+                      }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: 11, color: TEXT_SECONDARY }}>Deploys on</span>
+                          <span style={{
+                            fontSize: 11.5, fontWeight: 800, padding: "3px 9px", borderRadius: 999,
+                            border: `1px solid ${selJob.gpuId == null ? "rgba(255,255,255,0.2)" : `${PPO}55`}`,
+                            background: selJob.gpuId == null ? "rgba(255,255,255,0.06)" : `${PPO}1f`,
+                            color: selJob.gpuId == null ? TEXT_SECONDARY : PPO,
+                          }}>{selJob.gpuLabel}</span>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: 11, color: TEXT_SECONDARY }}>Queue position</span>
+                          <span style={{ fontSize: 11.5, fontWeight: 700 }}>
+                            {selJob.queuePos === 0 ? "Runs first" : `#${selJob.queuePos + 1} in queue`}
+                          </span>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                          <span style={{ fontSize: 11, color: TEXT_SECONDARY, flexShrink: 0 }}>Depends on</span>
+                          {selJob.depLabels.length === 0 ? (
+                            <span style={{ fontSize: 11.5, fontWeight: 700, color: "#3FE0A8" }}>None</span>
+                          ) : (
+                            <span style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "flex-end" }}>
+                              {selJob.depLabels.map((d, i) => (
+                                <span key={i} style={{
+                                  fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 999,
+                                  border: `1px solid ${REF}55`, background: `${REF}1f`, color: REF,
+                                }}>🎓 {d}</span>
+                              ))}
+                            </span>
+                          )}
+                        </div>
+                        <p style={{ margin: "2px 0 0 0", fontSize: 10, color: TEXT_SECONDARY, lineHeight: 1.45 }}>
+                          {gpuInfo == null ? "Checking available GPUs…"
+                            : (gpuInfo.free?.length
+                                ? `Snapshot: ${gpuInfo.free.length} free GPU(s) · independent jobs run in parallel.`
+                                : "No free GPU detected — jobs run sequentially on CPU.")}
+                          {" "}Recomputed at a fresh snapshot when you start training.
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   <div>
                     <div style={S.label}>Role</div>
