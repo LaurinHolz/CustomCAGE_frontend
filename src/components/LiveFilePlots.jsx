@@ -132,7 +132,53 @@ const styles = {
   log: { marginTop: 20, border: "1px solid rgba(255,255,255,0.1)", borderRadius: 14, background: "rgba(255,255,255,0.035)", padding: 14 },
   logTitle: { margin: "0 0 10px 0", fontSize: 14, fontWeight: 700 },
   logItem: { fontSize: 12, color: "var(--color-text-secondary, rgba(255,255,255,0.65))", padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" },
+
+  jobBar: { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 20 },
+  jobSelectWrap: { display: "flex", alignItems: "center", gap: 8 },
+  jobSelect: {
+    borderRadius: 9, padding: "7px 30px 7px 11px", fontSize: 12.5, fontWeight: 600,
+    background: "var(--input-bg, rgba(255,255,255,0.06))", color: "var(--color-text-primary, #f5f5f5)",
+    border: "1px solid rgba(255,255,255,0.14)", fontFamily: "inherit", cursor: "pointer",
+  },
+  jobStatusDot: (color) => ({ width: 8, height: 8, borderRadius: 999, background: color, flexShrink: 0 }),
+  jobSubtitle: { fontSize: 12, color: "var(--color-text-secondary, rgba(255,255,255,0.55))" },
 };
+
+// Bucket key for metric snapshots that carry no job identity — a plain
+// (non-curriculum) evaluation run, or anything from before job-tagging existed.
+const DEFAULT_JOB_KEY = "__default__";
+
+// Curriculum jobs are tagged (see curriculum_runner.py) with `node` (the
+// training node's id — stable and unique) and `job_name` (human-friendly).
+// `node` wins as the bucket key since it's guaranteed unique per job.
+function jobKeyOf(data) {
+  return data.node || data.job_name || DEFAULT_JOB_KEY;
+}
+
+const STATUS_COLORS = {
+  queued: "#6B7280",
+  running: "#3B8BD4",
+  done: "#1D9E75",
+  failed: "#E24B4A",
+  skipped: "#8A8A93",
+  stopped: "#E0A458",
+};
+
+function jobTitle(meta) {
+  if (!meta) return "";
+  if (meta.key === DEFAULT_JOB_KEY) return "Evaluation / untagged run";
+  return meta.jobName || meta.key;
+}
+
+function jobSubtitle(meta) {
+  if (!meta) return "";
+  const bits = [];
+  if (meta.side) bits.push(meta.side === "defender" ? "🛡️ defender" : meta.side === "attacker" ? "⚔️ attacker" : meta.side);
+  if (meta.phase) bits.push(meta.phase);
+  if (meta.jobNumber && meta.total) bits.push(`job ${meta.jobNumber}/${meta.total}`);
+  if (meta.gpu !== undefined && meta.gpu !== null) bits.push(`GPU ${meta.gpu}`);
+  return bits.join(" · ");
+}
 
 function toNumber(v) {
   if (v === null || v === undefined) return null;
@@ -283,13 +329,59 @@ function MultiPlotCard({ plot, history, chartRef }) {
 }
 
 export default function LiveFilePlots({ setConnected, onTrainingDone, onEvaluationDone, screenshotsEnabled }) {
-  const [history, setHistory] = useState([]);
-  const [log, setLog]         = useState([]);
+  // Per-job metric history — a curriculum run trains several jobs (sequentially
+  // or in parallel across GPUs); each is tagged with a stable key by
+  // curriculum_runner.py (see jobKeyOf) so their series never mix on one chart.
+  const [historyByJob, setHistoryByJob] = useState({});
+  const [jobsMeta, setJobsMeta]         = useState({});
+  const [jobOrder, setJobOrder]         = useState([]);
+  const [selectedJob, setSelectedJob]   = useState(null);
+  const [log, setLog]                   = useState([]);
   const captureTimer = useRef(null);
 
-  // Keep a ref so the SSE closure (opened once) can read the current value.
+  const history = historyByJob[selectedJob] || [];
+
+  // First job seen is auto-selected; once a selection exists (auto or manual)
+  // new jobs starting up don't yank the view away from what's on screen.
+  const registerJob = useCallback((key, data) => {
+    setJobOrder((prev) => (prev.includes(key) ? prev : [...prev, key]));
+    setJobsMeta((prev) => {
+      const existing = prev[key] || { key };
+      const next = {
+        ...existing,
+        jobName:   data.job_name ?? existing.jobName,
+        phase:     data.phase    ?? existing.phase,
+        side:      data.side     ?? existing.side,
+        node:      data.node     ?? existing.node,
+        gpu:       data.gpu      ?? existing.gpu,
+        jobNumber: data.job      ?? existing.jobNumber,
+        total:     data.total    ?? existing.total,
+      };
+      if (data.type === "curriculum_progress" && data.status) {
+        next.status = data.status;
+      } else {
+        // A real per-episode metric snapshot unambiguously means the job is
+        // running now — advance it off "queued", but don't clobber a terminal
+        // status if a stray snapshot arrives after done/failed/skipped.
+        const terminal = existing.status === "done" || existing.status === "failed" || existing.status === "skipped";
+        if (!terminal) next.status = "running";
+      }
+      return { ...prev, [key]: next };
+    });
+    setSelectedJob((cur) => cur ?? key);
+  }, []);
+
+  // Keep refs so the SSE closure (opened once, on mount) can read the current
+  // prop values without needing them in its effect's dependency array — the
+  // parent passes onTrainingDone/onEvaluationDone as fresh inline closures on
+  // every render, so depending on them directly would reopen the connection
+  // (and re-fetch history) far more often than intended.
   const screenshotsEnabledRef = useRef(screenshotsEnabled);
   useEffect(() => { screenshotsEnabledRef.current = screenshotsEnabled; }, [screenshotsEnabled]);
+  const onTrainingDoneRef = useRef(onTrainingDone);
+  useEffect(() => { onTrainingDoneRef.current = onTrainingDone; }, [onTrainingDone]);
+  const onEvaluationDoneRef = useRef(onEvaluationDone);
+  useEffect(() => { onEvaluationDoneRef.current = onEvaluationDone; }, [onEvaluationDone]);
 
   // Stable ref arrays — one per chart, created once on mount.
   const singleRefs = useRef(SINGLE_PLOTS.map(() => createRef()));
@@ -371,18 +463,17 @@ export default function LiveFilePlots({ setConnected, onTrainingDone, onEvaluati
     return () => clearTimeout(captureTimer.current);
   }, [history.length, captureScreenshot, screenshotsEnabled]);
 
-  useEffect(() => {
-    const source = new EventSource(SSE_URL);
-
-    source.onopen = () => setConnected(true);
-
-    source.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === "evaluation_done") {
-        onEvaluationDone?.();
-        return;
-      }
-      if (data.type === "training_done") {
+  // Handles one event from either the replayed history buffer or the live SSE
+  // stream. `isReplay` suppresses one-shot side effects (video compile, the
+  // isTraining/isEvaluating callbacks) that must fire only once, live — not
+  // every time an old tab reloads and replays a run that already finished.
+  const handleEvent = useCallback((data, { isReplay = false } = {}) => {
+    if (data.type === "evaluation_done") {
+      if (!isReplay) onEvaluationDoneRef.current?.();
+      return;
+    }
+    if (data.type === "training_done") {
+      if (!isReplay) {
         if (screenshotsEnabledRef.current) {
           // Wait 2 s after training_done so the last 800 ms screenshot timer
           // has time to fire and the PNG reaches the server before we compile.
@@ -390,31 +481,75 @@ export default function LiveFilePlots({ setConnected, onTrainingDone, onEvaluati
             fetch("http://127.0.0.1:9999/make-video", { method: "POST" }).catch(() => {});
           }, 2000);
         }
-        onTrainingDone?.();
-        return;
+        onTrainingDoneRef.current?.();
       }
-      setHistory((prev) => {
-        const snap = normalizeSnapshot(data, prev.length + 1);
-        setLog((prevLog) => [
-          { index: prevLog.length + 1, x: snap.x, snap, receivedAt: new Date().toISOString() },
-          ...prevLog,
-        ]);
-        return [...prev, snap];
-      });
-    };
+      return;
+    }
+    // Curriculum lifecycle events (job queued/started/done/failed/skipped, or
+    // the overall run start/complete) carry job identity but no plottable
+    // metrics — use them only to populate/update the job picker.
+    if (data.type === "curriculum_progress") {
+      const key = data.node || data.job_name;
+      if (key) registerJob(key, data);
+      return;
+    }
+    // A real per-episode metric snapshot.
+    const key = jobKeyOf(data);
+    registerJob(key, data);
+    setHistoryByJob((prev) => {
+      const arr = prev[key] || [];
+      const snap = normalizeSnapshot(data, arr.length + 1);
+      setLog((prevLog) => [
+        { index: prevLog.length + 1, jobKey: key, x: snap.x, snap, receivedAt: new Date().toISOString() },
+        ...prevLog,
+      ]);
+      return { ...prev, [key]: [...arr, snap] };
+    });
+  }, [registerJob]);
 
-    source.onerror = () => setConnected(false);
+  // On mount: replay whatever the server still has buffered from the current
+  // run (so a page refresh mid-training doesn't lose already-plotted data),
+  // then open the live stream for everything from here on.
+  const sourceRef = useRef(null);
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch("http://127.0.0.1:9999/metrics-history");
+        if (res.ok) {
+          const events = await res.json();
+          if (!cancelled) events.forEach((e) => handleEvent(e, { isReplay: true }));
+        }
+      } catch {
+        // Server unreachable / no buffer yet — just start fresh from live data.
+      }
+      if (cancelled) return;
+
+      const source = new EventSource(SSE_URL);
+      sourceRef.current = source;
+      source.onopen = () => setConnected(true);
+      source.onmessage = (event) => handleEvent(JSON.parse(event.data));
+      source.onerror = () => setConnected(false);
+    })();
 
     return () => {
-      source.close();
+      cancelled = true;
+      sourceRef.current?.close();
       setConnected(false);
     };
-  }, []);
+  }, [handleEvent, setConnected]);
 
   const clearAll = () => {
-    setHistory([]);
+    setHistoryByJob({});
+    setJobsMeta({});
+    setJobOrder([]);
+    setSelectedJob(null);
     setLog([]);
+    fetch("http://127.0.0.1:9999/clear-metrics", { method: "POST" }).catch(() => {});
   };
+
+  const selectedMeta = jobsMeta[selectedJob] || null;
 
   return (
     <div style={styles.page}>
@@ -423,10 +558,31 @@ export default function LiveFilePlots({ setConnected, onTrainingDone, onEvaluati
           <h2 style={styles.title}>Live training plots</h2>
         </div>
         <div style={styles.controls}>
+          <span style={styles.pill}>{jobOrder.length} job{jobOrder.length === 1 ? "" : "s"}</span>
           <span style={styles.pill}>{log.length} update{log.length === 1 ? "" : "s"}</span>
           <span style={styles.pill}>{history.length} snapshot{history.length === 1 ? "" : "s"}</span>
           <button style={styles.button} onClick={clearAll}>Clear all</button>
         </div>
+      </div>
+
+      <div style={styles.jobBar}>
+        <div style={styles.jobSelectWrap}>
+          {selectedMeta && <span style={styles.jobStatusDot(STATUS_COLORS[selectedMeta.status] || "#8A8A93")} />}
+          <select
+            style={styles.jobSelect}
+            value={selectedJob ?? ""}
+            disabled={jobOrder.length === 0}
+            onChange={(e) => setSelectedJob(e.target.value)}
+          >
+            {jobOrder.length === 0 && <option value="">Waiting for a job…</option>}
+            {jobOrder.map((key) => {
+              const meta = jobsMeta[key];
+              const statusTag = meta?.status ? ` — ${meta.status}` : "";
+              return <option key={key} value={key}>{jobTitle(meta)}{statusTag}</option>;
+            })}
+          </select>
+        </div>
+        {selectedMeta && <span style={styles.jobSubtitle}>{jobSubtitle(selectedMeta)}</span>}
       </div>
 
       <div style={styles.grid}>
