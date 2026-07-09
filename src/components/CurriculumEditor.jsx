@@ -408,6 +408,9 @@ export default function CurriculumEditor({ initialCurriculum, hostCount, onApply
   // Is the selected node the one being trained in its phase? Only then may it
   // start "from scratch"; otherwise it's a fixed opponent (checkpoint / reuse).
   const selTrains = !!selected && phasesById[selected.phaseId]?.trainingSide === selected.role;
+  // Opponents linked to the selected node — opponent-sampling only matters when
+  // the trained agent faces a *pool* (more than one) to choose between.
+  const selOpponents = selected ? opponentsOf(selected.id, nodesById, edges) : [];
 
   // Live free-GPU snapshot → a preview of how the jobs would be distributed.
   const [gpuInfo, setGpuInfo] = useState(null);
@@ -804,6 +807,24 @@ export default function CurriculumEditor({ initialCurriculum, hostCount, onApply
                           {" "}Recomputed at a fresh snapshot when you start training.
                         </p>
                       </div>
+                    </div>
+                  )}
+
+                  {selTrains && selOpponents.length > 1 && (
+                    <div>
+                      <div style={S.label}>Opponent sampling</div>
+                      <div style={S.segment}>
+                        <button style={S.segBtn(PPO, (selected.sampling || "random") === "random")}
+                          onClick={() => patch(selected.id, { sampling: "random" })}>🎲 Random</button>
+                        <button style={S.segBtn(PPO, selected.sampling === "weighted")}
+                          onClick={() => patch(selected.id, { sampling: "weighted" })}>📈 Weighted</button>
+                      </div>
+                      <p style={{ margin: "6px 0 0 0", fontSize: 10.5, color: TEXT_SECONDARY }}>
+                        Draws one of the {selOpponents.length} opponents per episode.
+                        <strong> Random</strong> is uniform; <strong>weighted</strong> favours the
+                        opponents this agent does worst against (a moving average of its reward,
+                        log-compressed).
+                      </p>
                     </div>
                   )}
 
