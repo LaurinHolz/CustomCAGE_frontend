@@ -291,7 +291,6 @@ export default function App() {
             style={{ ...S.btn, ...(isTraining ? { background: '#E24B4A', color: '#fff', border: 'none' } : S.btnSuccess) }}
             onClick={isTraining ? handleStopTraining : () => setTrainModalOpen(true)}
           >{isTraining ? "Stop" : "Train"}</button>
-          <TrainingJobsInfo ctx={trainCtx} />
           <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleEvaluate}>Evaluate</button>
           <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleVerify}>Verify</button>
           <ToggleSwitch
@@ -306,6 +305,7 @@ export default function App() {
           >
             {theme === "dark" ? "☀" : "☾"}
           </button>
+          <TrainingJobsInfo ctx={trainCtx} />
         </div>
       </div>
 

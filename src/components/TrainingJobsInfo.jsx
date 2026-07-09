@@ -11,6 +11,18 @@ const TEXT_SECONDARY = "var(--color-text-secondary, rgba(255,255,255,0.55))";
 
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 
+// A crisper stand-in for the "ⓘ" glyph, which renders thin/off-center in most
+// system fonts — a plain stroked circle + dot/stem reads cleanly at any size.
+function InfoIcon({ size = 15, color = "currentColor" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+      <circle cx="12" cy="12" r="9.25" stroke={color} strokeWidth="1.8" />
+      <circle cx="12" cy="7.6" r="1.15" fill={color} />
+      <path d="M12 11v6" stroke={color} strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 // A little progress ring: fraction 0..1 of `color` over a faint track.
 function Ring({ frac, color, size = 26 }) {
   const r = (size - 4) / 2, c = 2 * Math.PI * r, cx = size / 2;
@@ -84,8 +96,6 @@ export default function TrainingJobsInfo({ ctx }) {
     return m;
   }, [prog]);
 
-  if (!ctx || plan.jobs.length === 0) return null;
-
   const view = (j) => {
     const p = byNode[j.nodeId] || {};
     const status = p.status || "queued";
@@ -99,28 +109,38 @@ export default function TrainingJobsInfo({ ctx }) {
     return { status, step, frac, color };
   };
 
-  const running = plan.jobs.filter((j) => (byNode[j.nodeId]?.status) === "running").length;
-  const done = plan.jobs.filter((j) => (byNode[j.nodeId]?.status) === "done").length;
+  const hasJobs = !!ctx && plan.jobs.length > 0;
+  const running = hasJobs ? plan.jobs.filter((j) => (byNode[j.nodeId]?.status) === "running").length : 0;
+  const done    = hasJobs ? plan.jobs.filter((j) => (byNode[j.nodeId]?.status) === "done").length : 0;
 
   return (
     <div style={{ position: "relative", display: "inline-flex" }}>
       <button
         ref={btnRef}
         onClick={() => setOpen((o) => !o)}
-        title="Training jobs"
+        title={hasJobs ? "Training jobs" : "No active training run"}
         style={{
           width: 30, height: 30, borderRadius: "50%", cursor: "pointer", fontFamily: "inherit",
-          border: "1px solid rgba(255,255,255,0.18)", background: "rgba(255,255,255,0.06)",
-          color: "var(--color-text-primary, #f5f5f5)", fontSize: 14, fontWeight: 700,
-          display: "flex", alignItems: "center", justifyContent: "center", position: "relative",
+          border: `1px solid ${hasJobs ? "rgba(94,170,240,0.55)" : "rgba(255,255,255,0.2)"}`,
+          background: hasJobs
+            ? "linear-gradient(160deg, rgba(94,170,240,0.3), rgba(94,170,240,0.12))"
+            : "rgba(255,255,255,0.07)",
+          color: hasJobs ? "#A9D3F7" : "var(--color-text-primary, rgba(255,255,255,0.75))",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          position: "relative", opacity: hasJobs ? 1 : 0.8,
+          transition: "background .2s, color .2s, opacity .2s, border-color .2s",
+          animation: running > 0 ? "jobs-info-pulse 2s ease-out infinite" : "none",
         }}
+        onMouseEnter={(e) => { if (!hasJobs) e.currentTarget.style.opacity = 1; }}
+        onMouseLeave={(e) => { if (!hasJobs) e.currentTarget.style.opacity = 0.8; }}
       >
-        ⓘ
+        <InfoIcon size={15} color={hasJobs ? "#A9D3F7" : "currentColor"} />
         {running > 0 && (
           <span style={{
             position: "absolute", top: -3, right: -3, minWidth: 15, height: 15, padding: "0 3px",
             borderRadius: 999, background: BLUE, color: "#fff", fontSize: 9, fontWeight: 800,
             display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: "0 0 0 2px var(--color-background-tertiary, #13131a)",
           }}>{running}</span>
         )}
       </button>
@@ -129,62 +149,80 @@ export default function TrainingJobsInfo({ ctx }) {
         <>
           <div style={{ position: "fixed", inset: 0, zIndex: 40 }} onClick={() => setOpen(false)} />
           <div style={{
-            position: "absolute", top: "calc(100% + 8px)", right: 0, width: 340, maxHeight: 420,
-            overflowY: "auto", zIndex: 41, padding: 12, borderRadius: 14,
+            position: "absolute", top: "calc(100% + 10px)", right: 0, width: 340, maxHeight: 420,
+            overflowY: "auto", zIndex: 41, padding: 14, borderRadius: 16,
             background: "var(--modal-bg, #1c1c22)", border: "1px solid var(--modal-border, rgba(255,255,255,0.14))",
-            boxShadow: "0 18px 50px rgba(0,0,0,0.55)", color: "var(--color-text-primary, #f5f5f5)",
+            boxShadow: "0 20px 55px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.3)",
+            color: "var(--color-text-primary, #f5f5f5)",
           }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-              <span style={{ fontSize: 12.5, fontWeight: 800 }}>Training jobs</span>
-              <span style={{ fontSize: 10.5, color: TEXT_SECONDARY }}>
-                {done}/{plan.jobs.length} done{running ? ` · ${running} running` : ""}
-              </span>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 11, paddingBottom: 10, borderBottom: "1px solid var(--modal-border, rgba(255,255,255,0.1))" }}>
+              <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: "-0.1px" }}>Training jobs</span>
+              {hasJobs && (
+                <span style={{ fontSize: 10.5, color: TEXT_SECONDARY, fontWeight: 600 }}>
+                  {done}/{plan.jobs.length} done{running ? ` · ${running} running` : ""}
+                </span>
+              )}
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {plan.jobs.map((j) => {
-                const v = view(j);
-                return (
-                  <div key={j.nodeId} style={{
-                    display: "flex", alignItems: "center", gap: 10, padding: 8, borderRadius: 10,
-                    background: "var(--surface-muted, rgba(255,255,255,0.03))",
-                    border: "1px solid var(--modal-border, rgba(255,255,255,0.08))",
-                  }}>
-                    <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <Ring frac={v.frac} color={v.color} />
-                      <span style={{ position: "absolute", fontSize: 8, fontWeight: 800, color: v.color }}>
-                        {v.status === "done" ? "✓" : `${Math.round(v.frac * 100)}`}
-                      </span>
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{
-                        fontSize: 12, fontWeight: 700, whiteSpace: "nowrap",
-                        overflow: "hidden", textOverflow: "ellipsis",
-                      }} title={j.label}>
-                        <span style={{ color: j.role === "defender" ? "#3B8BD4" : "#E04B4A" }}>
-                          {j.role === "defender" ? "🛡️" : "⚔️"}
-                        </span>{" "}{j.label}
+
+            {!hasJobs ? (
+              <div style={{
+                display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+                padding: "22px 10px", textAlign: "center", color: TEXT_SECONDARY,
+              }}>
+                <span style={{ opacity: 0.6 }}><InfoIcon size={24} /></span>
+                <span style={{ fontSize: 12, fontWeight: 600 }}>No active training run</span>
+                <span style={{ fontSize: 11, lineHeight: 1.5 }}>
+                  Job progress will appear here once you start training.
+                </span>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {plan.jobs.map((j) => {
+                  const v = view(j);
+                  return (
+                    <div key={j.nodeId} style={{
+                      display: "flex", alignItems: "center", gap: 10, padding: 9, borderRadius: 11,
+                      background: "var(--surface-muted, rgba(255,255,255,0.03))",
+                      border: "1px solid var(--modal-border, rgba(255,255,255,0.08))",
+                      transition: "background .15s",
+                    }}>
+                      <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <Ring frac={v.frac} color={v.color} />
+                        <span style={{ position: "absolute", fontSize: 8, fontWeight: 800, color: v.color }}>
+                          {v.status === "done" ? "✓" : `${Math.round(v.frac * 100)}`}
+                        </span>
                       </div>
-                      <div style={{ fontSize: 10, color: TEXT_SECONDARY, display: "flex", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
-                        <span>{j.phaseName}</span>
-                        <span>·</span>
-                        <span>{j.gpuLabel}</span>
-                        {v.status === "running" || v.status === "queued" ? (
-                          <>
-                            <span>·</span>
-                            <span>ep {v.step}/{total}</span>
-                          </>
-                        ) : (
-                          <>
-                            <span>·</span>
-                            <span style={{ color: v.color, fontWeight: 700 }}>{v.status}</span>
-                          </>
-                        )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{
+                          fontSize: 12, fontWeight: 700, whiteSpace: "nowrap",
+                          overflow: "hidden", textOverflow: "ellipsis",
+                        }} title={j.label}>
+                          <span style={{ color: j.role === "defender" ? "#3B8BD4" : "#E04B4A" }}>
+                            {j.role === "defender" ? "🛡️" : "⚔️"}
+                          </span>{" "}{j.label}
+                        </div>
+                        <div style={{ fontSize: 10, color: TEXT_SECONDARY, display: "flex", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
+                          <span>{j.phaseName}</span>
+                          <span>·</span>
+                          <span>{j.gpuLabel}</span>
+                          {v.status === "running" || v.status === "queued" ? (
+                            <>
+                              <span>·</span>
+                              <span>ep {v.step}/{total}</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>·</span>
+                              <span style={{ color: v.color, fontWeight: 700 }}>{v.status}</span>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </>
       )}

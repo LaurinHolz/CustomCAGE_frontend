@@ -88,3 +88,10 @@ body {
   display: flex;
   flex-direction: column;
 }
+
+/* Soft attention pulse — used by the training-jobs info button while any job
+   is actively running, so it reads as "live" without an intrusive animation. */
+@keyframes jobs-info-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(59, 139, 212, 0.45); }
+  50%      { box-shadow: 0 0 0 6px rgba(59, 139, 212, 0); }
+}
