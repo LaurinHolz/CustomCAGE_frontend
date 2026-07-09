@@ -210,6 +210,15 @@ export const DEFAULT_CURRICULUM = {
   phaseEdges: [],
 };
 
+// Recommended PPO input-dims for a given topology, per role:
+//   blue observation = 6 × hosts   (activity+safety per host, scan, decoy)
+//   red observation  = 1 + 3 × hosts (red_success + per-host state)
+export function recommendedDims(role, hostCount) {
+  const h = hostCount || 0;
+  if (h < 1) return role === "defender" ? 78 : 40;
+  return role === "defender" ? 6 * h : 1 + 3 * h;
+}
+
 // Derive a runnable single-matchup team list from the first (root) phase.
 export function deriveRun(cur) {
   const { phases, nodes, edges, phaseEdges } = cur;
@@ -228,9 +237,10 @@ export function deriveRun(cur) {
   const members = [];
   if (blue) members.push({ id: blue.id, team: "blue", kind: blue.kind, key: blue.key, ckpt: blue.ckpt, dims: blue.dims });
   // The single-phase runner can only use fixed opponents (scripted or a real
-  // checkpoint). A from-scratch / trained-ref red is authoring for the deferred
-  // sequential runner, so it's left out of the immediate pool here.
-  pool.filter((a) => a.kind === "scripted" || a.kind === "ppo")
+  // checkpoint) — except when red is itself the training side, where a
+  // from-scratch (or resuming) red is the trainee, not a fixed opponent.
+  const trainsAttacker = root.trainingSide === "attacker";
+  pool.filter((a) => a.kind === "scripted" || a.kind === "ppo" || (trainsAttacker && a.kind === "scratch"))
       .forEach((a) => members.push({ id: a.id, team: "red", kind: a.kind, key: a.key, ckpt: a.ckpt, dims: a.dims }));
   return { members };
 }
@@ -371,14 +381,7 @@ function edgePath(sx, sy, ds, tx, ty, dt) {
 }
 
 export default function CurriculumEditor({ initialCurriculum, hostCount, onApply, onClose }) {
-  // Recommended PPO input-dims for the current topology, per role:
-  //   blue observation = 6 × hosts   (activity+safety per host, scan, decoy)
-  //   red observation  = 1 + 3 × hosts (red_success + per-host state)
-  const recFor = (role) => {
-    const h = hostCount || 0;
-    if (h < 1) return role === "defender" ? 78 : 40;
-    return role === "defender" ? 6 * h : 1 + 3 * h;
-  };
+  const recFor = (role) => recommendedDims(role, hostCount);
   const init = initialCurriculum && initialCurriculum.phases?.length ? initialCurriculum : DEFAULT_CURRICULUM;
   const [phases, setPhases]         = useState(init.phases);
   const [nodes, setNodes]           = useState(init.nodes);
