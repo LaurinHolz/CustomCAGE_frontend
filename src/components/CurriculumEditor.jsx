@@ -14,6 +14,7 @@ const BLUE = "#3B8BD4";
 const RED  = "#E04B4A";
 const PPO  = "#9B78F0";
 const REF  = "#2FB8A8";   // reference to a checkpoint trained by an earlier phase
+const WARN = "#F5A623";   // "needs attention" amber for the connect-me pulses
 const TEXT_PRIMARY   = "var(--color-text-primary, #f5f5f5)";
 const TEXT_SECONDARY = "var(--color-text-secondary, rgba(255,255,255,0.55))";
 
@@ -412,6 +413,68 @@ export default function CurriculumEditor({ initialCurriculum, hostCount, onApply
   // the trained agent faces a *pool* (more than one) to choose between.
   const selOpponents = selected ? opponentsOf(selected.id, nodesById, edges) : [];
 
+  // ── "Needs attention" detection — drives the amber connect-me pulses ──
+  // A node pulses if it isn't fully configured yet, or has no opposite-role
+  // opponent to train against. Each reason becomes a line in its tooltip.
+  const nodeIssues = useMemo(() => {
+    const m = {};
+    nodes.forEach((n) => {
+      const reasons = [];
+      if (!isConfigured(n)) reasons.push("Not configured yet — pick its weights / opponent in the inspector.");
+      if (opponentsOf(n.id, nodesById, edges).length === 0)
+        reasons.push("No matchup — drag its ● port to an agent on the other side, or it will never be trained.");
+      if (reasons.length) m[n.id] = reasons;
+    });
+    return m;
+  }, [nodes, nodesById, edges]);
+  // A phase pulses if it holds no agents, or (with siblings) isn't chained in.
+  const phaseIssues = useMemo(() => {
+    const m = {};
+    const multi = phases.length > 1;
+    const chained = new Set();
+    phaseEdges.forEach((e) => { chained.add(e.from); chained.add(e.to); });
+    phases.forEach((p) => {
+      const roles = new Set(nodes.filter((n) => n.phaseId === p.id).map((n) => n.role));
+      const reasons = [];
+      if (roles.size === 0) reasons.push("Empty phase — add a defender and an attacker.");
+      else {
+        if (!roles.has("defender")) reasons.push("No defender — add one so this phase can form a matchup.");
+        if (!roles.has("attacker")) reasons.push("No attacker — add one so this phase can form a matchup.");
+      }
+      if (multi && !chained.has(p.id)) reasons.push("Not chained — drag its ▸ port to another phase to set training order.");
+      if (reasons.length) m[p.id] = reasons;
+    });
+    return m;
+  }, [phases, nodes, phaseEdges]);
+  // Matchup arrows that link two same-side agents can never be a real matchup
+  // (opponents are always opposite-role) — the "wrong way around" case.
+  const badEdgeIds = useMemo(() => {
+    const s = new Set();
+    edges.forEach((e) => {
+      const a = nodesById[e.from], b = nodesById[e.to];
+      if (a && b && a.role === b.role) s.add(e.id);
+    });
+    return s;
+  }, [edges, nodesById]);
+  // Phase arrows pointing "backwards": the target can already reach the source,
+  // so the arrow closes a loop and the chain order can't be honoured.
+  const badPhaseEdgeIds = useMemo(() => {
+    const s = new Set();
+    phaseEdges.forEach((e) => { if (ancestorsOf(e.from, phaseEdges).has(e.to)) s.add(e.id); });
+    return s;
+  }, [phaseEdges]);
+
+  const nodeIssueCount  = Object.keys(nodeIssues).length;
+  const phaseIssueCount = Object.keys(phaseIssues).length;
+  const badArrowCount   = badEdgeIds.size + badPhaseEdgeIds.size;
+  const hasPulses = nodeIssueCount > 0 || phaseIssueCount > 0 || badArrowCount > 0;
+  // Amber ring that grows outward (spread) while fading (alpha), both driven by
+  // the shared --cur-pulse clock so every ring is identical frame-for-frame.
+  const PULSE_NODE  = "0 0 0 calc(var(--cur-pulse) * 7px) rgba(245, 166, 35, calc(0.7 * (1 - var(--cur-pulse))))";
+  const PULSE_PHASE = "0 0 0 calc(var(--cur-pulse) * 11px) rgba(245, 166, 35, calc(0.55 * (1 - var(--cur-pulse)))), 0 8px 22px rgba(0,0,0,0.35)";
+  // Amber highlight over a bad arrow — fades out on the same clock (no snap-back).
+  const PULSE_EDGE_OPACITY = "calc(0.5 * (1 - var(--cur-pulse)))";
+
   // Live free-GPU snapshot → a preview of how the jobs would be distributed.
   const [gpuInfo, setGpuInfo] = useState(null);
   useEffect(() => { fetchGpuInfo().then(setGpuInfo); }, []);
@@ -605,7 +668,25 @@ export default function CurriculumEditor({ initialCurriculum, hostCount, onApply
 
   return (
     <div style={S.overlay} onClick={onClose}>
-      <div style={S.panel} onClick={(e) => e.stopPropagation()}>
+      <div style={{ ...S.panel, ...(hasPulses ? { animation: "cur-pulse-drive 2.4s ease-out infinite" } : {}) }}
+        onClick={(e) => e.stopPropagation()}>
+
+        {/* Pulsing "connect me" glow for agents/phases that aren't wired into
+            anything yet. A single animated custom property (--cur-pulse, driven
+            once on the panel) is inherited by every pulsing element, so all the
+            rings stay perfectly in sync. It ramps 0→1 each cycle, and the ring
+            expands + fades out from the element — one-directional, no breathe-back. */}
+        <style>{`
+          @property --cur-pulse {
+            syntax: '<number>';
+            inherits: true;
+            initial-value: 0;
+          }
+          @keyframes cur-pulse-drive {
+            from { --cur-pulse: 0; }
+            to   { --cur-pulse: 1; }
+          }
+        `}</style>
 
         <div style={S.header}>
           <div>
@@ -628,22 +709,25 @@ export default function CurriculumEditor({ initialCurriculum, hostCount, onApply
               {/* Edges */}
               <svg style={S.svg}>
                 <defs>
-                  <marker id="arrowN" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
-                    <path d="M0,0 L7,3 L0,6 Z" fill={RED} />
-                  </marker>
                   <marker id="arrowP" markerWidth="10" markerHeight="10" refX="8" refY="3.2" orient="auto">
                     <path d="M0,0 L8,3.2 L0,6.4 Z" fill={PPO} />
+                  </marker>
+                  <marker id="arrowW" markerWidth="10" markerHeight="10" refX="8" refY="3.2" orient="auto">
+                    <path d="M0,0 L8,3.2 L0,6.4 Z" fill={WARN} />
                   </marker>
                 </defs>
                 {phaseEdges.map((e) => {
                   const a = anchors[`P:${e.from}:out`], b = anchors[`P:${e.to}:in`];
                   if (!a || !b) return null;
                   const d = edgePath(a.x, a.y, 1, b.x, b.y, -1);
+                  const bad = badPhaseEdgeIds.has(e.id);
                   return (
                     <g key={e.id} style={{ pointerEvents: "stroke", cursor: "pointer" }}
                        onClick={() => setPhaseEdges((es) => es.filter((x) => x.id !== e.id))}>
+                      {bad && <title>Backwards phase link — it loops the chain back on itself. Delete it and chain the phases the other way.</title>}
                       <path d={d} stroke="transparent" strokeWidth={14} fill="none" />
-                      <path d={d} stroke={PPO} strokeWidth={2.5} fill="none" strokeDasharray="7 5" markerEnd="url(#arrowP)" />
+                      {bad && <path d={d} stroke={WARN} strokeWidth={7} fill="none" strokeLinecap="round" style={{ opacity: PULSE_EDGE_OPACITY }} />}
+                      <path d={d} stroke={bad ? WARN : PPO} strokeWidth={2.5} fill="none" strokeDasharray="7 5" markerEnd={bad ? "url(#arrowW)" : "url(#arrowP)"} />
                     </g>
                   );
                 })}
@@ -651,11 +735,16 @@ export default function CurriculumEditor({ initialCurriculum, hostCount, onApply
                   const a = anchors[e.from], b = anchors[e.to];
                   if (!a || !b) return null;
                   const d = edgePath(a.x, a.y, dirOf(e.from), b.x, b.y, dirOf(e.to));
+                  const bad = badEdgeIds.has(e.id);
                   return (
                     <g key={e.id} style={{ pointerEvents: "stroke", cursor: "pointer" }}
                        onClick={() => setEdges((es) => es.filter((x) => x.id !== e.id))}>
+                      {bad && <title>Same-side matchup — this links two agents on the same team. A matchup must join a defender and an attacker.</title>}
                       <path d={d} stroke="transparent" strokeWidth={12} fill="none" />
-                      <path d={d} stroke={RED} strokeWidth={2} fill="none" markerEnd="url(#arrowN)" />
+                      {bad && <path d={d} stroke={WARN} strokeWidth={6} fill="none" strokeLinecap="round" style={{ opacity: PULSE_EDGE_OPACITY }} />}
+                      {/* No arrowhead: matchups are undirected — the backend links
+                          a defender↔attacker regardless of which way it was drawn. */}
+                      <path d={d} stroke={bad ? WARN : RED} strokeWidth={2} fill="none" />
                     </g>
                   );
                 })}
@@ -684,12 +773,17 @@ export default function CurriculumEditor({ initialCurriculum, hostCount, onApply
                         onPointerDown={(e) => e.stopPropagation()}>＋</button>
                     </div>
                     {list.length === 0
-                      ? <div style={S.laneEmpty}>empty</div>
+                      ? <div style={{ ...S.laneEmpty, borderColor: WARN, color: WARN, boxShadow: PULSE_NODE }}
+                          title={`Add a ${role === "defender" ? "defender" : "attacker"} so this phase can form a matchup.`}>empty</div>
                       : list.map((n) => {
                           const d = describe(n, { trainedLabelById, phasesById });
                           const side = role === "defender" ? "right" : "left";
+                          const issues = nodeIssues[n.id];
                           return (
-                            <div key={n.id} data-node-id={n.id} style={S.node(accent, selectedNodeId === n.id)}
+                            <div key={n.id} data-node-id={n.id}
+                              style={{ ...S.node(accent, selectedNodeId === n.id),
+                                ...(issues ? { boxShadow: PULSE_NODE } : {}) }}
+                              title={issues ? issues.join("\n") : undefined}
                               onPointerDown={(e) => { e.stopPropagation(); setSelectedNodeId(n.id); }}>
                               <span style={S.nodeIcon}>{d.icon}</span>
                               <div style={S.nodeMain}>
@@ -704,8 +798,12 @@ export default function CurriculumEditor({ initialCurriculum, hostCount, onApply
                         })}
                   </div>
                 );
+                const pIssues = phaseIssues[ph.id];
                 return (
-                  <div key={ph.id} data-phase-id={ph.id} style={{ ...S.phase, left: ph.x, top: ph.y, width: w, height: h }}>
+                  <div key={ph.id} data-phase-id={ph.id}
+                    title={pIssues ? pIssues.join("\n") : undefined}
+                    style={{ ...S.phase, left: ph.x, top: ph.y, width: w, height: h,
+                      ...(pIssues ? { boxShadow: PULSE_PHASE } : {}) }}>
                     <div style={S.phaseHead} onPointerDown={(e) => startPhaseDrag(e, ph)}>
                       <input style={S.phaseName} value={ph.name} onPointerDown={(e) => e.stopPropagation()}
                         onChange={(e) => setPhases((ps) => ps.map((p) => p.id === ph.id ? { ...p, name: e.target.value } : p))} />
@@ -963,7 +1061,15 @@ export default function CurriculumEditor({ initialCurriculum, hostCount, onApply
 
         <div style={S.footer}>
           <span style={S.footHint}>
-            {canApply
+            {hasPulses ? (
+              <span style={{ color: WARN, fontWeight: 600 }}>
+                {"⚠︎ "}{[
+                  nodeIssueCount > 0 && `${nodeIssueCount} agent(s) need setup`,
+                  phaseIssueCount > 0 && `${phaseIssueCount} phase(s) incomplete`,
+                  badArrowCount > 0 && `${badArrowCount} bad arrow(s)`,
+                ].filter(Boolean).join(" · ")} — fix the pulsing items.
+              </span>
+            ) : canApply
               ? `Ready — ${trainJobs.length} matchup(s) train in chain order (${defenderJobs} defender, ${attackerJobs} attacker).`
               : !allConfigured ? "Finish configuring every node (missing checkpoint or dims)."
               : "The first phase needs at least one defender and one attacker to run."}
