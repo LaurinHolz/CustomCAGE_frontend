@@ -20,6 +20,7 @@ import VerificationTree from "./components/VerificationTree";
 import VerificationProperties from "./components/VerificationProperties";
 import VerificationStatistics from "./components/VerificationStatistic";
 import VerificationResults from "./components/VerificationResults";
+import SimFVGap from "./components/SimFVGap";
 import EvaluateModal from "./components/EvaluateModal";
 import VerifyModal from "./components/VerificationConfig";
 import TrainModal from "./components/TrainModal";
@@ -33,6 +34,7 @@ const VERIFICATION_OPTIONS = [
   { key: "properties", label: "Properties" },
   { key: "results", label: "Results" },
   { key: "statistics", label: "Statistics"},
+  { key: "sim-fv-gap", label: "Sim-FV Gap" },
 ];
 
 // ─── Main App ─────────────────────────────────────────────────────
@@ -497,6 +499,9 @@ export default function App() {
         <div style={{ display: verificationView === "statistics" ? "block" : "none" }}>
           <VerificationStatistics />
         </div>
+      </div>
+      <div style={{ display: verificationView === "sim-fv-gap" ? "block" : "none" }}>
+      <SimFVGap />
       </div>
 
 
