@@ -26,6 +26,7 @@ import TrainModal from "./components/TrainModal";
 import TrainingJobsInfo from "./components/TrainingJobsInfo";
 import { fetchGpuInfo } from "./components/CurriculumEditor";
 import ToggleSwitch from "./components/ToggleSwitch";
+import BlueActionDistributionChart from "./components/BlueActionDistribution";
 
 const VERIFICATION_OPTIONS = [
   { key: "bfs", label: "BFS" },
@@ -477,7 +478,12 @@ export default function App() {
           screenshotsEnabled={screenshotsEnabled}
         />
       </div>
-      {tab === "evaluation" && <WatchdogAveragesTable evalState={evalState} />}
+      {tab === "evaluation" && (
+          <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
+            <WatchdogAveragesTable evalState={evalState} />
+            <BlueActionDistributionChart evalState={evalState} />
+          </div>
+      )}
       <div style={{ display: tab === "verification" ? "block" : "none" }}>
         <div style={{ display: verificationView === "bfs" ? "block" : "none" }}>
           <VerificationTree startSignal={verifySignal} />

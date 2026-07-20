@@ -8,7 +8,6 @@ const TEXT_SECONDARY = "var(--color-text-secondary, rgba(255,255,255,0.55))";
 const OBS_PRESETS = [1, 0.95, 0.9, 0.85, 0.8];
 
 const FV_APPROACHES = [
-  { id: "free-mono", sub: "unrestricted · monolithic" },
   { id: "fix-mono", sub: "fixed · monolithic" },
   { id: "free-dyna", sub: "unrestricted · dynamic" },
   { id: "fix-dyna", sub: "fixed · dynamic" },

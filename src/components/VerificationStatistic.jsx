@@ -30,6 +30,9 @@ const isValidModel = (m) =>
 
 const isValidTiming = (timings, key) => Number.isFinite(timings?.[key]);
 
+const isValidDecoy = (d) =>
+  Number.isFinite(d?.number_switches) && Number.isFinite(d?.models_generated);
+
 function makeOptions({ yLabel, log = false }) {
   return {
     responsive: true,
@@ -110,6 +113,37 @@ function ModelStatsTable({ formal, induced }) {
               </tr>
             );
           })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function DecoyStatsTable({ decoy }) {
+  const rows = [
+    { label: "Model Switches", color: C.stageB, value: decoy?.number_switches },
+    { label: "Models Generated", color: C.stageC, value: decoy?.models_generated },
+  ];
+
+  return (
+    <div style={tableCard}>
+      <table style={statTable}>
+        <thead>
+          <tr>
+            <th style={th}>Metric</th>
+            <th style={{ ...th, textAlign: "right" }}>Count</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.label}>
+              <td style={td}>
+                <span style={{ ...dot, background: r.color }} />
+                {r.label}
+              </td>
+              <td style={tdNum}>{fmtInt(r.value)}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
@@ -239,6 +273,7 @@ export default function VerificationStatistics() {
   const formal = stats?.formal_model;
   const induced = stats?.induced_model;
   const timings = stats?.timings;
+  const decoy = stats?.decoy_metrics;
 
   const hasFormalModel = isValidModel(formal);
   const hasInducedModel = isValidModel(induced);
@@ -246,6 +281,8 @@ export default function VerificationStatistics() {
 
   const hasTimings =
     !!timings && STAGES.some((s) => isValidTiming(timings, s.key));
+
+  const hasDecoyStats = isValidDecoy(decoy);
 
   const modelChartData = useMemo(() => {
     const datasets = [];
@@ -374,6 +411,20 @@ export default function VerificationStatistics() {
             {verifyRunning
               ? "Waiting for verification to complete…"
               : "No timing data yet."}
+          </p>
+        )}
+
+        <div style={{ ...sectionHeader, marginTop: 20 }}>
+          <span style={sectionLabel}>Decoy Statistics</span>
+        </div>
+
+        {hasDecoyStats ? (
+          <DecoyStatsTable decoy={decoy} />
+        ) : (
+          <p style={emptyText}>
+            {verifyRunning
+              ? "Waiting for verification to complete…"
+              : "No decoy statistics yet."}
           </p>
         )}
 
