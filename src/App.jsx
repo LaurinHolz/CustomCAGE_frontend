@@ -499,11 +499,10 @@ export default function App() {
         <div style={{ display: verificationView === "statistics" ? "block" : "none" }}>
           <VerificationStatistics />
         </div>
+        <div style={{ display: verificationView === "sim-fv-gap" ? "block" : "none" }}>
+        <SimFVGap />
+        </div>
       </div>
-      <div style={{ display: verificationView === "sim-fv-gap" ? "block" : "none" }}>
-      <SimFVGap />
-      </div>
-
 
       {toast && <div style={S.toast}>{toast}</div>}
       {trainModalOpen && (
