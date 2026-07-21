@@ -73,6 +73,31 @@ export default function ConfigPanel({ state, setState }) {
     );
   };
 
+  const renderToggle = (title, field, color, description, defaultValue = false) => {
+    const value = state[field] ?? defaultValue;
+    return (
+      <div style={S.section}>
+        <label style={S.label}>{title}</label>
+        {description && <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>{description}</div>}
+        <div style={{ ...S.row, marginTop: 4 }}>
+          {[true, false].map(opt => (
+            <span key={String(opt)}
+              style={{
+                ...S.chip(value === opt),
+                background: value === opt ? color : 'var(--color-background-secondary)',
+                color: value === opt ? '#fff' : 'var(--color-text-secondary)',
+                borderColor: value === opt ? color : 'var(--color-border-tertiary)',
+                cursor: 'pointer', fontWeight: 500, minWidth: 40, textAlign: 'center'
+              }}
+              onClick={() => setState(s => ({ ...s, [field]: opt }))}>
+              {opt ? 'on' : 'off'}
+            </span>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   const renderLockout = (title, field) => {
     const lockout = state[field] || { red: {}, blue: {} };
     return (
@@ -245,6 +270,8 @@ export default function ConfigPanel({ state, setState }) {
 
       {/* ── Numeric params ── */}
       {renderProbSelector("Exploit priority (exploitPrio)", "exploitPrio", "#D85A30", "Probability that red chooses to exploit over other actions")}
+      {renderToggle("Restore resets decoys (restoreResetsDecoys)", "restoreResetsDecoys", "#1D9E75",
+        "Whether a successful restore rolls the host back to its baseline image, removing all decoys placed on it")}
       {renderProbSelector("Exploit observability (exploitObs)", "exploitObs", "#3B8BD4", "Probability that blue observes a red exploit action")}
       {renderProbSelector("Remove success rate (removeSuccess)", "removeSuccess", "#1D9E75", "Probability that blue's remove action succeeds")}
       {renderProbSelector("Restore success rate (restoreSuccess)", "restoreSuccess", "#1D9E75", "Probability that blue's restore action succeeds")}

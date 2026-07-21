@@ -54,6 +54,7 @@ export function exportToBackendFormat(state) {
     EXPLOIT_OBS:       state.exploitObs   ?? 0.95,
     REMOVE_SUCCESS:    state.removeSuccess  ?? 1.0,
     RESTORE_SUCCESS:   state.restoreSuccess ?? 1.0,
+    RESTORE_RESETS_DECOYS: state.restoreResetsDecoys ?? false,
 
     RED_ACTIONS:       state.redActions,
     BLUE_ACTIONS:      state.blueActions,

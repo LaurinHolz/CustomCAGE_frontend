@@ -107,6 +107,7 @@ export const CAGE2_PRESET = {
   exploitObs:     0.95,
   removeSuccess:  1.0,
   restoreSuccess: 1.0,
+  restoreResetsDecoys: false,
   numSubnets:     3,
 
   // Lockouts

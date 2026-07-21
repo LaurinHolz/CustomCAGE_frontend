@@ -136,6 +136,7 @@ export function makeEmpty() {
     exploitObs:       0.95,
     removeSuccess:    0.0,
     restoreSuccess:   1.0,
+    restoreResetsDecoys: false,
     numSubnets:       0,
     agentLockout:     { red: { ...AGENT_LOCKOUT.red }, blue: { ...AGENT_LOCKOUT.blue } },
     hostLockout:      { red: { ...HOST_LOCKOUT.red }, blue: { ...HOST_LOCKOUT.blue } },

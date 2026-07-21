@@ -123,6 +123,7 @@ export const CAGE2_125_PRESET = {
   exploitObs:     0.95,
   removeSuccess:  1.0,
   restoreSuccess: 1.0,
+  restoreResetsDecoys: false,
   numSubnets:     3,
 
   agentLockout: AGENT_LOCKOUT,
