@@ -2,6 +2,34 @@ import { useCallback, useEffect, useState } from "react";
 
 const CHECKPOINTS_URL = "http://127.0.0.1:9999/checkpoints";
 
+const HEURISTIC_AGENTS = [
+  {
+    value: "sleep-only",
+    label: "Sleep Only",
+    description: "Use only the Sleep action.",
+  },
+  {
+    value: "decoy-only",
+    label: "Decoy Only",
+    description: "Use only decoy-placement actions.",
+  },
+  {
+    value: "restore-only",
+    label: "Restore Only",
+    description: "Use only restore actions.",
+  },
+  {
+    value: "startup-decoy-restore",
+    label: "Startup Decoy Restore",
+    description: "Place startup decoys, then react with Restore.",
+  },
+  {
+    value: "decoy-restore",
+    label: "Decoy Restore",
+    description: "Use the combined Decoy and Restore heuristic.",
+  },
+];
+
 const TEXT_PRIMARY = "var(--color-text-primary, #f5f5f5)";
 const TEXT_SECONDARY = "var(--color-text-secondary, rgba(255,255,255,0.55))";
 
@@ -11,6 +39,8 @@ const FV_APPROACHES = [
   { id: "fix-mono", sub: "fixed · monolithic" },
   { id: "free-dyna", sub: "unrestricted · dynamic" },
   { id: "fix-dyna", sub: "fixed · dynamic" },
+  { id: "free-dyna-partioned", sub: "unrestricted · dynamic · partitioned" },
+  { id: "free-dyna-fine_grained", sub: "unrestricted · dynamic · fine-grained" },
 ];
 
 const styles = {
@@ -44,8 +74,8 @@ const styles = {
   sectionLabel: { margin: "0 0 10px 0", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: TEXT_SECONDARY },
   segment: { display: "flex", padding: 4, borderRadius: 12, background: "var(--surface-muted)", border: "1px solid var(--modal-border)" },
   segmentBtn: (active) => ({
-    flex: 1, padding: "9px 12px", borderRadius: 9, border: "none", cursor: "pointer",
-    fontSize: 12.5, fontWeight: 700, fontFamily: "inherit", letterSpacing: "0.01em",
+    flex: 1, minWidth: 0, minHeight: 38, padding: "8px 8px", borderRadius: 9, border: "none", cursor: "pointer",
+    fontSize: 11.5, fontWeight: 700, fontFamily: "inherit", letterSpacing: "0.01em", lineHeight: 1.2,
     background: active ? "linear-gradient(180deg, #4AA0E6, #3B8BD4)" : "transparent",
     color: active ? "#fff" : TEXT_SECONDARY,
     boxShadow: active ? "0 6px 16px rgba(59,139,212,0.35)" : "none",
@@ -74,6 +104,7 @@ const styles = {
   itemPath: { fontSize: 11, color: TEXT_SECONDARY, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
   itemMeta: { display: "flex", alignItems: "center", gap: 8, flexShrink: 0 },
   itemBadge: { fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 999, background: "var(--surface-hover)", color: TEXT_SECONDARY },
+  selectedBadge: { fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 999, background: "rgba(59,139,212,0.18)", color: "#63B3F3" },
   itemTime: { fontSize: 11, color: TEXT_SECONDARY, whiteSpace: "nowrap" },
   dividerRow: { display: "flex", alignItems: "center", gap: 10 },
   dividerLine: { flex: 1, height: 1, background: "var(--color-border-secondary)" },
@@ -148,6 +179,8 @@ export default function VerifyModal({ onClose, onVerify }) {
   const [selectedPath, setSelectedPath] = useState("");
   const [customPath, setCustomPath] = useState("");
   const [hoveredPath, setHoveredPath] = useState(null);
+  const [selectedHeuristic, setSelectedHeuristic] = useState("");
+  const [hoveredHeuristic, setHoveredHeuristic] = useState(null);
 
   // FV controls
   const [topK, setTopK] = useState(1);
@@ -182,7 +215,11 @@ export default function VerifyModal({ onClose, onVerify }) {
     return c.name.toLowerCase().includes(q) || c.relPath.toLowerCase().includes(q);
   });
 
-  const chosenPath = mode === "latest" ? data.latest : (customPath.trim() || selectedPath);
+  const chosenPath = mode === "latest"
+    ? data.latest
+    : mode === "browse"
+      ? (customPath.trim() || selectedPath)
+      : null;
 
   const topKValue = parseInt(topK, 10);
   const topKValid = Number.isFinite(topKValue) && topKValue >= 1;
@@ -191,13 +228,21 @@ export default function VerifyModal({ onClose, onVerify }) {
   const obsValue = usingCustomObs ? Number(obsCustom) : obsPreset;
   const obsValid = Number.isFinite(obsValue) && obsValue >= 0 && obsValue <= 1;
 
-  const canRun = !loading && !!chosenPath && topKValid && obsValid;
+  const blueAgentValid = mode === "heuristic"
+    ? !!selectedHeuristic
+    : !loading && !!chosenPath;
+
+  const canRun = blueAgentValid
+    && obsValid
+    && (mode === "heuristic" || topKValid);
 
   const handleRun = () => {
     if (!canRun) return;
+
     onVerify({
-      ckptPath: mode === "latest" ? null : chosenPath,
-      topK: topKValue,
+      ckptPath: mode === "browse" ? chosenPath : null,
+      heuristicAgent: mode === "heuristic" ? selectedHeuristic : null,
+      topK: mode === "heuristic" ? 1 : topKValue,
       partialObservability: obsValue,
       fvApproach,
     });
@@ -209,21 +254,22 @@ export default function VerifyModal({ onClose, onVerify }) {
         <div style={styles.header}>
           <div>
             <h3 style={styles.title}>Run verification</h3>
-            <p style={styles.subtitle}>Pick a checkpoint, set the policy and observability model, then run formal verification over the policy-induced Markov chain.</p>
+            <p style={styles.subtitle}>Select a trained checkpoint or a heuristic Blue agent, configure the verification model, and run formal verification.</p>
           </div>
           <button style={styles.closeBtn} onClick={onClose}>×</button>
         </div>
 
         <div style={styles.body}>
-          {/* ---- Checkpoint ---- */}
+          {/* ---- Blue agent ---- */}
           <div>
-            <div style={styles.sectionLabel}>Checkpoint</div>
+            <div style={styles.sectionLabel}>Blue agent</div>
             <div style={styles.segment}>
-              <button style={styles.segmentBtn(mode === "latest")} onClick={() => setMode("latest")}>Latest from training</button>
+              <button style={styles.segmentBtn(mode === "latest")} onClick={() => setMode("latest")}>Latest</button>
               <button style={styles.segmentBtn(mode === "browse")} onClick={() => setMode("browse")}>Browse files</button>
+              <button style={styles.segmentBtn(mode === "heuristic")} onClick={() => setMode("heuristic")}>Heuristic Blue Agents</button>
             </div>
 
-            {mode === "latest" ? (
+            {mode === "latest" && (
               <div style={{ marginTop: 12 }}>
                 {loading ? (
                   <div style={styles.emptyState}>Looking for checkpoints…</div>
@@ -238,11 +284,13 @@ export default function VerifyModal({ onClose, onVerify }) {
                   <div style={styles.emptyState}>
                     {error
                       ? `Could not reach the backend (http://127.0.0.1:9999): ${error}`
-                      : "No checkpoints found in meander_ppo/. Train a model first, or browse for a file."}
+                      : "No checkpoints found in meander_ppo/. Train a model first, browse for a file, or select a heuristic."}
                   </div>
                 )}
               </div>
-            ) : (
+            )}
+
+            {mode === "browse" && (
               <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
                 <input
                   style={styles.input}
@@ -301,24 +349,66 @@ export default function VerifyModal({ onClose, onVerify }) {
                 />
               </div>
             )}
+
+            {mode === "heuristic" && (
+              <div style={{ marginTop: 12 }}>
+                <div style={styles.list}>
+                  {HEURISTIC_AGENTS.map((agent) => {
+                    const selected = selectedHeuristic === agent.value;
+                    const hovered = hoveredHeuristic === agent.value;
+                    return (
+                      <div
+                        key={agent.value}
+                        style={styles.listItem(selected, hovered)}
+                        onClick={() => setSelectedHeuristic(agent.value)}
+                        onMouseEnter={() => setHoveredHeuristic(agent.value)}
+                        onMouseLeave={() => setHoveredHeuristic(null)}
+                        title={agent.value}
+                      >
+                        <div style={styles.itemMain}>
+                          <span style={styles.itemName}>{agent.label}</span>
+                          <span style={styles.itemPath}>{agent.description}</span>
+                        </div>
+                        <div style={styles.itemMeta}>
+                          <span style={selected ? styles.selectedBadge : styles.itemBadge}>
+                            {selected ? "Selected" : "Heuristic"}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ---- Stochastic policy ---- */}
-          <div>
-            <div style={styles.sectionLabel}>Stochastic policy</div>
-            <div style={styles.numberField}>
-              <label style={styles.numberLabel}>Top-k actions</label>
-              <input
-                style={styles.input} type="number" min="1" step="1"
-                value={topK}
-                onChange={(e) => setTopK(e.target.value)}
-              />
+          {mode !== "heuristic" && (
+            <div>
+              <div style={styles.sectionLabel}>Stochastic policy</div>
+              <div style={styles.numberField}>
+                <label style={styles.numberLabel}>Top-k actions</label>
+                <input
+                  style={styles.input} type="number" min="1" step="1"
+                  value={topK}
+                  onChange={(e) => setTopK(e.target.value)}
+                />
+              </div>
+              <p style={styles.helperText}>
+                k = 1 induces the greedy (deterministic) policy. k &gt; 1 builds a stochastic policy over the top-k actions, re-normalized per state.
+              </p>
+              {!topKValid && <p style={styles.errorText}>Top-k must be an integer ≥ 1.</p>}
             </div>
-            <p style={styles.helperText}>
-              k = 1 induces the greedy (deterministic) policy. k &gt; 1 builds a stochastic policy over the top-k actions, re-normalized per state.
-            </p>
-            {!topKValid && <p style={styles.errorText}>Top-k must be an integer ≥ 1.</p>}
-          </div>
+          )}
+
+          {mode === "heuristic" && (
+            <div>
+              <div style={styles.sectionLabel}>Policy semantics</div>
+              <div style={styles.emptyState}>
+                Heuristic Blue agents are deterministic. Formal verification therefore uses one selected action per state (top-k = 1).
+              </div>
+            </div>
+          )}
 
           {/* ---- Partial observability ---- */}
           <div>

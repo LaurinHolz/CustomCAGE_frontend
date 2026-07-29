@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 const FV_URL = "http://127.0.0.1:9999/fv-key-metrics";
-
-// Hier denselben Endpoint eintragen, den WatchdogAveragesTable
-// für das vorhandene Evaluation-JSON verwendet.
 const SIM_URL = "http://127.0.0.1:9999/watchdog-averages";
 
-const GREEN_THRESHOLD = 5;
-const YELLOW_THRESHOLD = 15;
+const GOOD_STANDARDIZED_THRESHOLD = 0.5;
+const MODERATE_STANDARDIZED_THRESHOLD = 1.0;
+
+// Evaluation runs use a fixed horizon of 100 steps per episode.
+const SIMULATION_STEPS_PER_EPISODE = 100;
 
 const STRUCTURE_METRICS = [
   {
@@ -31,91 +31,94 @@ const STRUCTURE_METRICS = [
 const COMPARISON_METRICS = [
   {
     label: "Cumulative reward",
-    simKey: "reward",
+    simMeanKey: "reward",
+    simStdKey: "reward_std",
+    simNKey: "reward_n",
     fvMeanKey: "cumulative_reward_mean",
     fvStdKey: "cumulative_reward_std",
     fvNKey: "cumulative_reward_n",
   },
   {
     label: "Mean reward per step",
-    simKey: null,
+    // The simulation stores cumulative reward per episode. Because every
+    // evaluation episode has a fixed 100-step horizon, mean and standard
+    // deviation per step are obtained by dividing both by 100.
+    simMeanKey: "reward",
+    simStdKey: "reward_std",
+    simNKey: "reward_n",
+    simDivisor: SIMULATION_STEPS_PER_EPISODE,
     fvMeanKey: "mean_reward_per_step_mean",
     fvStdKey: "mean_reward_per_step_std",
     fvNKey: "mean_reward_per_step_n",
   },
   {
     label: "First exploit V1",
-    simKey: "first_exploit_V1",
+    simMeanKey: "first_exploit_V1",
+    simStdKey: "first_exploit_V1_std",
+    simNKey: "first_exploit_V1_n",
     fvMeanKey: "t_first_exploit_v1_mean",
     fvStdKey: "t_first_exploit_v1_std",
     fvNKey: "t_first_exploit_v1_n",
   },
   {
     label: "First entry V2",
-    simKey: "first_entry_V2",
+    simMeanKey: "first_entry_V2",
+    simStdKey: "first_entry_V2_std",
+    simNKey: "first_entry_V2_n",
     fvMeanKey: "t_first_entry_v2_mean",
     fvStdKey: "t_first_entry_v2_std",
     fvNKey: "t_first_entry_v2_n",
   },
   {
     label: "First exploit V2",
-    simKey: "first_exploit_V2",
+    simMeanKey: "first_exploit_V2",
+    simStdKey: "first_exploit_V2_std",
+    simNKey: "first_exploit_V2_n",
     fvMeanKey: "t_first_exploit_v2_mean",
     fvStdKey: "t_first_exploit_v2_std",
     fvNKey: "t_first_exploit_v2_n",
   },
   {
     label: "First entry V3",
-    simKey: "first_entry_V3",
+    simMeanKey: "first_entry_V3",
+    simStdKey: "first_entry_V3_std",
+    simNKey: "first_entry_V3_n",
     fvMeanKey: "t_first_entry_v3_mean",
     fvStdKey: "t_first_entry_v3_std",
     fvNKey: "t_first_entry_v3_n",
   },
   {
-    label: "Exploit attempts V1",
-    simKey: null,
-    fvMeanKey: "num_exploit_attempts_v1_mean",
-    fvStdKey: "num_exploit_attempts_v1_std",
-    fvNKey: "num_exploit_attempts_v1_n",
-  },
-  {
-    label: "Exploit attempts V2",
-    simKey: null,
-    fvMeanKey: "num_exploit_attempts_v2_mean",
-    fvStdKey: "num_exploit_attempts_v2_std",
-    fvNKey: "num_exploit_attempts_v2_n",
-  },
-  {
-    label: "Exploit attempts V3",
-    simKey: null,
-    fvMeanKey: "num_exploit_attempts_v3_mean",
-    fvStdKey: "num_exploit_attempts_v3_std",
-    fvNKey: "num_exploit_attempts_v3_n",
-  },
-  {
     label: "Restores total",
-    simKey: "total_restores",
+    simMeanKey: "total_restores",
+    simStdKey: "total_restores_std",
+    simNKey: "total_restores_n",
     fvMeanKey: "restore_total_mean",
     fvStdKey: "restore_total_std",
     fvNKey: "restore_total_n",
   },
   {
     label: "Restores V1",
-    simKey: "restore_V1",
+    simMeanKey: "restore_V1",
+    simStdKey: "restore_V1_std",
+    simNKey: "restore_V1_n",
     fvMeanKey: "restore_v1_mean",
     fvStdKey: "restore_v1_std",
     fvNKey: "restore_v1_n",
   },
   {
     label: "Restores V2",
-    simKey: "restore_V2",
+    simMeanKey: "restore_V2",
+    simStdKey: "restore_V2_std",
+    simNKey: "restore_V2_n",
     fvMeanKey: "restore_v2_mean",
     fvStdKey: "restore_v2_std",
     fvNKey: "restore_v2_n",
   },
   {
     label: "Restores V3",
-    simKey: "restore_V3",
+    simMeanKey: "restore_V3",
+    simStdKey: "restore_V3_std",
+    simNKey: "restore_V3_n",
     fvMeanKey: "restore_v3_mean",
     fvStdKey: "restore_v3_std",
     fvNKey: "restore_v3_n",
@@ -236,7 +239,7 @@ const styles = {
 
   table: {
     width: "100%",
-    minWidth: 850,
+    minWidth: 1080,
     borderCollapse: "collapse",
     fontSize: 12,
   },
@@ -325,45 +328,68 @@ function formatInteger(value) {
   }).format(number);
 }
 
-function calculateGap(simValue, fvValue) {
-  const sim = normalizeNumber(simValue);
-  const fv = normalizeNumber(fvValue);
+function calculateGap(simMeanValue, fvMeanValue, simStdValue, fvStdValue) {
+  const simMean = normalizeNumber(simMeanValue);
+  const fvMean = normalizeNumber(fvMeanValue);
+  const simStd = normalizeNumber(simStdValue);
+  const fvStd = normalizeNumber(fvStdValue);
 
-  if (sim === null || fv === null) {
+  if (simMean === null || fvMean === null) {
     return {
       absoluteGap: null,
       relativeGap: null,
+      standardizedGap: null,
       status: null,
     };
   }
 
-  const absoluteGap = Math.abs(sim - fv);
+  const absoluteGap = Math.abs(simMean - fvMean);
 
   let relativeGap;
 
-  if (sim === 0 && fv === 0) {
+  if (simMean === 0 && fvMean === 0) {
     relativeGap = 0;
   } else {
     const denominator = Math.max(
-      Math.abs(sim),
-      Math.abs(fv),
+      Math.abs(simMean),
+      Math.abs(fvMean),
       Number.EPSILON,
     );
 
     relativeGap = (absoluteGap / denominator) * 100;
   }
 
-  let status = "red";
+  // The status is based on the mean difference relative to the typical
+  // episode-to-episode variation in simulation and formal-model samples.
+  // Sample sizes are deliberately not used here: using standard errors would
+  // make even practically small differences look large for high n.
+  let standardizedGap = null;
+  let status = null;
 
-  if (relativeGap <= GREEN_THRESHOLD) {
-    status = "green";
-  } else if (relativeGap <= YELLOW_THRESHOLD) {
-    status = "yellow";
+  if (simStd !== null && fvStd !== null && simStd >= 0 && fvStd >= 0) {
+    const combinedStd = Math.sqrt((simStd ** 2 + fvStd ** 2) / 2);
+
+    if (combinedStd <= Number.EPSILON) {
+      standardizedGap = absoluteGap <= Number.EPSILON
+        ? 0
+        : Number.POSITIVE_INFINITY;
+    } else {
+      standardizedGap = absoluteGap / combinedStd;
+    }
+
+    if (standardizedGap <= GOOD_STANDARDIZED_THRESHOLD) {
+      status = "green";
+    } else if (standardizedGap <= MODERATE_STANDARDIZED_THRESHOLD) {
+      status = "yellow";
+    } else {
+      status = "red";
+    }
   }
 
   return {
     absoluteGap,
     relativeGap,
+    standardizedGap,
     status,
   };
 }
@@ -414,7 +440,7 @@ function StructureCard({ label, value }) {
   );
 }
 
-function FVValue({ mean, std, n }) {
+function MetricValue({ mean, std, n }) {
   const normalizedMean = normalizeNumber(mean);
   const normalizedStd = normalizeNumber(std);
   const normalizedN = normalizeNumber(n);
@@ -444,9 +470,41 @@ function FVValue({ mean, std, n }) {
   );
 }
 
+function flattenStatistics(statistics) {
+  if (!statistics || typeof statistics !== "object") {
+    return {};
+  }
+
+  return Object.entries(statistics).reduce((flat, [key, value]) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      flat[key] = value;
+      return flat;
+    }
+
+    const hasStatistics =
+      Object.prototype.hasOwnProperty.call(value, "mean") ||
+      Object.prototype.hasOwnProperty.call(value, "std") ||
+      Object.prototype.hasOwnProperty.call(value, "n");
+
+    if (!hasStatistics) {
+      flat[key] = value;
+      return flat;
+    }
+
+    flat[key] = value.mean ?? null;
+    flat[`${key}_std`] = value.std ?? null;
+    flat[`${key}_n`] = value.n ?? null;
+    return flat;
+  }, {});
+}
+
 function unwrapResponse(data) {
   if (!data || typeof data !== "object") {
     return {};
+  }
+
+  if (data.statistics && typeof data.statistics === "object") {
+    return flattenStatistics(data.statistics);
   }
 
   return (
@@ -496,7 +554,11 @@ export default function SimFVGap() {
       setSimData(unwrapResponse(simulationResponse));
       setFvData(unwrapResponse(fvResponse));
     } catch (loadError) {
-      setError(loadError.message);
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : String(loadError),
+      );
     } finally {
       setLoading(false);
     }
@@ -508,8 +570,23 @@ export default function SimFVGap() {
 
   const rows = useMemo(() => {
     return COMPARISON_METRICS.map((metric) => {
-      const simValue = metric.simKey
-        ? normalizeNumber(simData?.[metric.simKey])
+      const simDivisor = normalizeNumber(metric.simDivisor) ?? 1;
+
+      const rawSimMean = metric.simMeanKey
+        ? normalizeNumber(simData?.[metric.simMeanKey])
+        : null;
+      const rawSimStd = metric.simStdKey
+        ? normalizeNumber(simData?.[metric.simStdKey])
+        : null;
+
+      const simMean = rawSimMean === null
+        ? null
+        : rawSimMean / simDivisor;
+      const simStd = rawSimStd === null
+        ? null
+        : rawSimStd / simDivisor;
+      const simN = metric.simNKey
+        ? normalizeNumber(simData?.[metric.simNKey])
         : null;
 
       const fvMean = normalizeNumber(fvData?.[metric.fvMeanKey]);
@@ -518,11 +595,18 @@ export default function SimFVGap() {
 
       return {
         ...metric,
-        simValue,
+        simMean,
+        simStd,
+        simN,
         fvMean,
         fvStd,
         fvN,
-        ...calculateGap(simValue, fvMean),
+        ...calculateGap(
+          simMean,
+          fvMean,
+          simStd,
+          fvStd,
+        ),
       };
     });
   }, [simData, fvData]);
@@ -535,7 +619,7 @@ export default function SimFVGap() {
 
           <p style={styles.subtitle}>
             Comparison between simulation results and the generated formal
-            model.
+            model. Values are shown as mean ± standard deviation.
           </p>
         </div>
 
@@ -578,16 +662,16 @@ export default function SimFVGap() {
           </div>
 
           <div style={styles.legend}>
-            <span>Relative difference:</span>
+            <span>Status based on standardized mean difference:</span>
 
             <StatusBadge status="green" />
-            <span>≤ {GREEN_THRESHOLD}%</span>
+            <span>≤ {GOOD_STANDARDIZED_THRESHOLD}</span>
 
             <StatusBadge status="yellow" />
-            <span>≤ {YELLOW_THRESHOLD}%</span>
+            <span>≤ {MODERATE_STANDARDIZED_THRESHOLD}</span>
 
             <StatusBadge status="red" />
-            <span>&gt; {YELLOW_THRESHOLD}%</span>
+            <span>&gt; {MODERATE_STANDARDIZED_THRESHOLD}</span>
           </div>
 
           <div style={styles.panel}>
@@ -600,23 +684,28 @@ export default function SimFVGap() {
                     <th style={styles.th}>Formal model</th>
                     <th style={styles.th}>Absolute gap</th>
                     <th style={styles.th}>Relative gap</th>
+                    <th style={styles.th}>Standardized gap</th>
                     <th style={styles.th}>Status</th>
                   </tr>
                 </thead>
 
                 <tbody>
                   {rows.map((row) => (
-                    <tr key={row.fvMeanKey}>
+                    <tr key={row.label}>
                       <td style={styles.td}>
                         <span style={styles.metric}>{row.label}</span>
                       </td>
 
                       <td style={styles.td}>
-                        {formatNumber(row.simValue)}
+                        <MetricValue
+                          mean={row.simMean}
+                          std={row.simStd}
+                          n={row.simN}
+                        />
                       </td>
 
                       <td style={styles.td}>
-                        <FVValue
+                        <MetricValue
                           mean={row.fvMean}
                           std={row.fvStd}
                           n={row.fvN}
@@ -631,6 +720,14 @@ export default function SimFVGap() {
                         {isNumber(row.relativeGap)
                           ? `${formatNumber(row.relativeGap, 2)}%`
                           : "-"}
+                      </td>
+
+                      <td style={styles.td}>
+                        {Number.isFinite(row.standardizedGap)
+                          ? formatNumber(row.standardizedGap, 2)
+                          : row.standardizedGap === Number.POSITIVE_INFINITY
+                            ? "∞"
+                            : "-"}
                       </td>
 
                       <td style={styles.td}>

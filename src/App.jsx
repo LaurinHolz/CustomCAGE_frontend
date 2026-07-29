@@ -5,6 +5,9 @@ import { CAGE2_075_PRESET} from "./data/cage2_075_preset.js";
 import { CAGE2_125_PRESET} from "./data/cage2_125_preset.js";
 import { CAGE2_ADD_USER_PRESET} from "./data/cage2_add_user_preset.js";
 import {CAGE2_ADD_SERVER_PRESET} from "./data/cage2_add_server_preset.js";
+import { CAGE2_150_PRESET} from "./data/cage2_1_5_preset.js";
+import { CAGE2_200_PRESET} from "./data/cage2_2_preset.js";
+import { CAGE2_250_PRESET} from "./data/cage2_25_preset.js";
 import {S} from "./styles/styles"
 import { HOST_W, HOST_H, ZONE_W, ZONE_H, ZONE_PAD } from "./constants/layout";
 import { uid } from "./utils/ids";
@@ -100,6 +103,15 @@ export default function App() {
   } else if (val === "cage2_add_server") {
     setState(JSON.parse(JSON.stringify(CAGE2_ADD_SERVER_PRESET)))
     showToast("Loaded CAGE-2 + Server")
+  } else if (val == "cage2_150") {
+    setState(JSON.parse(JSON.stringify(CAGE2_150_PRESET)))
+    showToast("Loaded 1.5x CAGE-2")
+  } else if (val == "cage2_200") {
+    setState(JSON.parse(JSON.stringify(CAGE2_200_PRESET)))
+    showToast("Loaded 2x CAGE-2")
+  } else if (val == "cage2_250") {
+    setState(JSON.parse(JSON.stringify(CAGE2_250_PRESET)))
+    showToast("Loaded 2.5x CAGE-2")
   } else if (val === "empty") {
     setState(makeEmpty());
     showToast("Loaded empty canvas");
@@ -198,47 +210,63 @@ export default function App() {
 
   const handleEvaluate = () => setEvalModalOpen(true);
 
-  const handleVerify = () => setVerifyModalOpen(true);
+  const handleVerify = () => {
+  setVerifyModalOpen(true);
+};
 
-  const runEvaluate = async ({ ckptPath, numEpisodes, maxTimesteps }) => {
-    try {
-      const params = new URLSearchParams();
-      if (ckptPath) params.set("ckpt_path", ckptPath);
-      params.set("num_episodes", String(numEpisodes));
-      params.set("max_timesteps", String(maxTimesteps));
-
-      const res = await fetch(`http://127.0.0.1:9999/evaluate?${params.toString()}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(backendData),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setEvalModalOpen(false);
-      setEvalState("running");
-      showToast("Evaluation started ✓");
-    } catch (err) {
-      showToast(`Failed: ${err.message}`);
-    }
-  };
-
-  const runVerify = async ({ ckptPath, topK, partialObservability, fvApproach }) => {
+  const runVerify = async ({
+  ckptPath,
+  heuristicAgent,
+  topK,
+  partialObservability,
+  fvApproach,
+}) => {
   try {
     const params = new URLSearchParams();
-    if (ckptPath) params.set("ckpt_path", ckptPath);
+
+    if (ckptPath) {
+      params.set("ckpt_path", ckptPath);
+    }
+
+    if (heuristicAgent) {
+      params.set("heuristic_agent", heuristicAgent);
+    }
+
     params.set("top_k", String(topK));
-    params.set("partial_observability", String(partialObservability));
+    params.set(
+      "partial_observability",
+      String(partialObservability)
+    );
     params.set("fv_approach", fvApproach);
 
-    const res = await fetch(`http://127.0.0.1:9999/verify?${params.toString()}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(backendData),
+    console.log("Verification parameters:", {
+      ckptPath,
+      heuristicAgent,
+      topK,
+      partialObservability,
+      fvApproach,
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const res = await fetch(
+      `http://127.0.0.1:9999/verify?${params.toString()}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(backendData),
+      }
+    );
+
+    if (!res.ok) {
+      const message = await res.text();
+      throw new Error(message || `HTTP ${res.status}`);
+    }
+
     setVerifyModalOpen(false);
     setVerifySignal((n) => n + 1);
     setTab("verification");
-    setVerificationView("bfs");   // BFS-Tree zeigen, damit der Fortschritt sichtbar ist
+    setVerificationView("bfs");
     showToast("Verification started ✓");
   } catch (err) {
     showToast(`Failed: ${err.message}`);
@@ -287,6 +315,9 @@ export default function App() {
             <option value="cage2_125">1.25x CAGE-2</option>
             <option value="cage2_add_user">Cage-2 + User</option>
             <option value="cage2_add_server">CAGE-2 + Server</option>
+            <option value="cage2_150">1.5x CAGE-2</option>
+            <option value="cage2_200">2.0x CAGE-2</option>
+            <option value="cage2_250">2.5x CAGE-2</option>
             <option value="empty">Empty (Custom)</option>
           </select>
           <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleDownload}>Download JSON</button>
