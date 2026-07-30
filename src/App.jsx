@@ -214,6 +214,36 @@ export default function App() {
   setVerifyModalOpen(true);
 };
 
+  const runEvaluate = async ({ ckptPath, heuristicAgent, numEpisodes, maxTimesteps }) => {
+  try {
+    const params = new URLSearchParams();
+    if (ckptPath) params.set("ckpt_path", ckptPath);
+    if (heuristicAgent) params.set("heuristic_agent", heuristicAgent);
+    params.set("num_episodes", String(numEpisodes));
+    params.set("max_timesteps", String(maxTimesteps));
+
+    const res = await fetch(
+      `http://127.0.0.1:9999/evaluate?${params.toString()}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(backendData),
+      }
+    );
+    if (!res.ok) {
+      const message = await res.text();
+      throw new Error(message || `HTTP ${res.status}`);
+    }
+
+    setEvalModalOpen(false);
+    setEvalState("running");
+    setTab("evaluation");
+    showToast("Evaluation started ✓");
+  } catch (err) {
+    showToast(`Failed: ${err.message}`);
+  }
+};
+
   const runVerify = async ({
   ckptPath,
   heuristicAgent,
