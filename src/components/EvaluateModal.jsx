@@ -1,6 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
+import FileBrowserModal from "./FileBrowserModal";
 
 const CHECKPOINTS_URL = "http://127.0.0.1:9999/checkpoints";
+
+function teamLabel(team) {
+  if (team === "blue") return "Blue";
+  if (team === "red") return "Red";
+  return "Unknown";
+}
+
+function teamColor(team) {
+  if (team === "blue") return "#4AA0E6";
+  if (team === "red") return "#E04B4A";
+  return "#8B8F9A";
+}
 
 const TEXT_PRIMARY = "var(--color-text-primary, #f5f5f5)";
 const TEXT_SECONDARY = "var(--color-text-secondary, rgba(255,255,255,0.55))";
@@ -34,7 +47,20 @@ const styles = {
   },
   body: { padding: 24, overflowY: "auto", display: "flex", flexDirection: "column", gap: 22 },
   sectionLabel: { margin: "0 0 10px 0", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: TEXT_SECONDARY },
-  segment: { display: "flex", padding: 4, borderRadius: 12, background: "var(--surface-muted)", border: "1px solid var(--modal-border)" },
+  panelCard: {
+    display: "flex", flexDirection: "column", gap: 12,
+    padding: 14, borderRadius: 14,
+    border: "1px solid var(--modal-border)", background: "var(--surface-muted)",
+  },
+  panelHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  panelTitle: { fontSize: 13, fontWeight: 700, color: TEXT_PRIMARY },
+  panelSubtitle: { fontSize: 11.5, color: TEXT_SECONDARY, lineHeight: 1.4 },
+  panelBadge: (color) => ({
+    padding: "4px 8px", borderRadius: 999, fontSize: 10, fontWeight: 700,
+    textTransform: "uppercase", letterSpacing: "0.06em", color,
+    background: `${color}18`, border: `1px solid ${color}33`, whiteSpace: "nowrap",
+  }),
+  segment: { display: "flex", padding: 4, borderRadius: 12, background: "rgba(255,255,255,0.04)", border: "1px solid var(--modal-border)" },
   segmentBtn: (active) => ({
     flex: 1, padding: "9px 12px", borderRadius: 9, border: "none", cursor: "pointer",
     fontSize: 12.5, fontWeight: 700, fontFamily: "inherit", letterSpacing: "0.01em",
@@ -49,6 +75,17 @@ const styles = {
     background: "var(--input-bg)", color: TEXT_PRIMARY,
     outline: "none", fontFamily: "inherit",
   },
+  optionGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 },
+  optionCard: (active, accent) => ({
+    display: "flex", flexDirection: "column", gap: 4, textAlign: "left",
+    padding: "10px 11px", borderRadius: 11, cursor: "pointer",
+    border: `1px solid ${active ? accent : "var(--modal-border)"}`,
+    background: active ? `${accent}14` : "rgba(255,255,255,0.03)",
+    color: TEXT_PRIMARY,
+    transition: "all .12s",
+  }),
+  optionTitle: { fontSize: 12.5, fontWeight: 700 },
+  optionDesc: { fontSize: 10.5, color: TEXT_SECONDARY, lineHeight: 1.35 },
   latestCard: { display: "flex", flexDirection: "column", gap: 8, padding: 14, borderRadius: 12, background: "rgba(29,158,117,0.08)", border: "1px solid rgba(29,158,117,0.25)" },
   latestBadge: { alignSelf: "flex-start", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", padding: "3px 9px", borderRadius: 999, background: "rgba(29,158,117,0.2)", color: "#3FE0A8" },
   latestPath: { fontSize: 12, fontFamily: "var(--font-mono, ui-monospace, monospace)", color: TEXT_PRIMARY, wordBreak: "break-all" },
@@ -91,6 +128,11 @@ function basename(p) {
   return idx >= 0 ? p.slice(idx + 1) : p;
 }
 
+function maskBadge(c) {
+  if (!c.actionMasking) return null;
+  return c.maskMode === "ladder" ? "🪜 Ladder" : "💀 Dead-only";
+}
+
 function stepBadge(name) {
   const m = name.match(/^(\d+)\.pth$/);
   return m ? `step ${m[1]}` : null;
@@ -107,7 +149,8 @@ function fmtAgo(mtime) {
 
 export default function EvaluateModal({ onClose, onRun }) {
   const [mode, setMode] = useState("latest");
-  const [data, setData] = useState({ checkpoints: [], latest: null });
+  const [blueData, setBlueData] = useState({ checkpoints: [], latest: null });
+  const [redData, setRedData] = useState({ checkpoints: [], latest: null });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState("");
@@ -116,21 +159,50 @@ export default function EvaluateModal({ onClose, onRun }) {
   const [hoveredPath, setHoveredPath] = useState(null);
   const [numEpisodes, setNumEpisodes] = useState(20);
   const [maxTimesteps, setMaxTimesteps] = useState(100);
+  const [redAgentType, setRedAgentType] = useState("scripted");
+  const [redAgentKey, setRedAgentKey] = useState("meander");
+  const [redAgentCkpt, setRedAgentCkpt] = useState("");
+  const [redAgentDims, setRedAgentDims] = useState(-1);
+  const [blueActionMasking, setBlueActionMasking] = useState("auto"); // "auto" | "on" | "off"
+  const [redActionMasking, setRedActionMasking] = useState(false);
+  const [redMaskMode, setRedMaskMode] = useState("dead"); // "dead" | "ladder"
+  const [redMode, setRedMode] = useState("latest");
+  const [redSearch, setRedSearch] = useState("");
+  const [redSelectedPath, setRedSelectedPath] = useState("");
+  const [redCustomPath, setRedCustomPath] = useState("");
+  const [redHoveredPath, setRedHoveredPath] = useState(null);
+  const [browserOpen, setBrowserOpen] = useState(false);
 
-  const load = useCallback(() => {
-    fetch(CHECKPOINTS_URL)
+  const load = useCallback((team = "blue") => {
+    const url = team ? `${CHECKPOINTS_URL}?team=${encodeURIComponent(team)}` : CHECKPOINTS_URL;
+    fetch(url)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
       })
-      .then((d) => { setData(d); setError(null); })
+      .then((d) => {
+        if (team === "red") {
+          setRedData(d);
+        } else {
+          setBlueData(d);
+        }
+        setError(null);
+      })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
-    load();
+    load("blue");
   }, [load]);
+
+  useEffect(() => {
+    if (redAgentType === "ppo") {
+      load("red");
+    } else {
+      load("blue");
+    }
+  }, [redAgentType, load]);
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
@@ -138,21 +210,44 @@ export default function EvaluateModal({ onClose, onRun }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const filtered = data.checkpoints.filter((c) => {
+  useEffect(() => {
+    if (redMode === "latest" && redData.latest) {
+      setRedAgentCkpt(redData.latest);
+    }
+  }, [redMode, redData.latest]);
+
+  const filtered = blueData.checkpoints.filter((c) => {
     const q = search.trim().toLowerCase();
+    if (c.team && c.team !== "blue") return false;
     if (!q) return true;
     return c.name.toLowerCase().includes(q) || c.relPath.toLowerCase().includes(q);
   });
 
-  const chosenPath = mode === "latest" ? data.latest : (customPath.trim() || selectedPath);
+  const redFiltered = redData.checkpoints.filter((c) => {
+    const q = redSearch.trim().toLowerCase();
+    if (c.team && c.team !== "red") return false;
+    if (!q) return true;
+    return c.name.toLowerCase().includes(q) || c.relPath.toLowerCase().includes(q);
+  });
+
+  const chosenPath = mode === "latest" ? blueData.latest : (customPath.trim() || selectedPath);
   const canRun = !loading && !!chosenPath;
+  const redCanRun = redAgentType !== "ppo" || !!redAgentCkpt;
 
   const handleRun = () => {
-    if (!canRun) return;
+    if (!canRun || !redCanRun) return;
+
+    const redAgentSpec = redAgentType === "ppo"
+      ? { type: "ppo", ckpt: redAgentCkpt, dims: Number(redAgentDims) || -1,
+          action_masking: redActionMasking, mask_mode: redMaskMode }
+      : { type: "scripted", key: redAgentKey };
+
     onRun({
       ckptPath: mode === "latest" ? null : chosenPath,
       numEpisodes: Math.max(1, parseInt(numEpisodes, 10) || 20),
       maxTimesteps: Math.max(1, parseInt(maxTimesteps, 10) || 100),
+      redAgent: redAgentSpec,
+      actionMasking: blueActionMasking === "auto" ? null : blueActionMasking === "on",
     });
   };
 
@@ -168,23 +263,47 @@ export default function EvaluateModal({ onClose, onRun }) {
         </div>
 
         <div style={styles.body}>
-          <div>
-            <div style={styles.sectionLabel}>Checkpoint</div>
+          <div style={styles.panelCard}>
+            <div style={styles.panelHeader}>
+              <div>
+                <div style={styles.panelTitle}>Blue checkpoint</div>
+                <div style={styles.panelSubtitle}>Choose the policy used for the blue defender during evaluation.</div>
+              </div>
+              <span style={styles.panelBadge("#4AA0E6")}>Blue</span>
+            </div>
+
             <div style={styles.segment}>
               <button style={styles.segmentBtn(mode === "latest")} onClick={() => setMode("latest")}>Latest from training</button>
               <button style={styles.segmentBtn(mode === "browse")} onClick={() => setMode("browse")}>Browse files</button>
             </div>
 
+            <div>
+              <div style={styles.numberLabel}>Action masking</div>
+              <div style={{ ...styles.segment, marginTop: 6 }}>
+                <button style={styles.segmentBtn(blueActionMasking === "auto")} onClick={() => setBlueActionMasking("auto")}>Same as training</button>
+                <button style={styles.segmentBtn(blueActionMasking === "off")} onClick={() => setBlueActionMasking("off")}>Allow any action</button>
+                <button style={styles.segmentBtn(blueActionMasking === "on")} onClick={() => setBlueActionMasking("on")}>Only useful actions</button>
+              </div>
+              <p style={styles.optionDesc}>
+                Action masking stops blue from ever choosing a move that couldn't possibly do anything
+                right now — e.g. analysing a host it already fully understands, or placing a decoy after
+                its one-time setup window has passed. It doesn't add new abilities, it just removes choices
+                that would waste a turn. <strong>Same as training</strong> uses whichever way this checkpoint
+                was actually trained (recommended, since that's how it learned to play); the other two
+                options let you override that for this evaluation run.
+              </p>
+            </div>
+
             {mode === "latest" ? (
-              <div style={{ marginTop: 12 }}>
+              <div>
                 {loading ? (
                   <div style={styles.emptyState}>Looking for checkpoints…</div>
-                ) : data.latest ? (
+                ) : blueData.latest ? (
                   <div style={styles.latestCard}>
                     <span style={styles.latestBadge}>
-                      Latest{stepBadge(basename(data.latest)) ? ` · ${stepBadge(basename(data.latest))}` : ""}
+                      Latest{stepBadge(basename(blueData.latest)) ? ` · ${stepBadge(basename(blueData.latest))}` : ""}
                     </span>
-                    <div style={styles.latestPath} title={data.latest}>{data.latest}</div>
+                    <div style={styles.latestPath} title={blueData.latest}>{blueData.latest}</div>
                   </div>
                 ) : (
                   <div style={styles.emptyState}>
@@ -195,7 +314,7 @@ export default function EvaluateModal({ onClose, onRun }) {
                 )}
               </div>
             ) : (
-              <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <input
                   style={styles.input}
                   placeholder="Search checkpoints by name or path…"
@@ -229,6 +348,8 @@ export default function EvaluateModal({ onClose, onRun }) {
                           </div>
                           <div style={styles.itemMeta}>
                             {badge && <span style={styles.itemBadge}>{badge}</span>}
+                            {maskBadge(c) && <span style={styles.itemBadge}>{maskBadge(c)}</span>}
+                            <span style={{ ...styles.itemBadge, color: teamColor(c.team), background: `${teamColor(c.team)}18`, border: `1px solid ${teamColor(c.team)}33` }}>{teamLabel(c.team)}</span>
                             <span style={styles.itemTime}>{fmtAgo(c.mtime)}</span>
                           </div>
                         </div>
@@ -251,6 +372,153 @@ export default function EvaluateModal({ onClose, onRun }) {
                     if (e.target.value.trim()) setSelectedPath("");
                   }}
                 />
+              </div>
+            )}
+          </div>
+
+          <div style={styles.panelCard}>
+            <div style={styles.panelHeader}>
+              <div>
+                <div style={styles.panelTitle}>Red opponent</div>
+                <div style={styles.panelSubtitle}>Pick a scripted attacker or a trained PPO policy for the red side.</div>
+              </div>
+              <span style={styles.panelBadge("#E04B4A")}>Red</span>
+            </div>
+
+            <div style={styles.optionGrid}>
+              <button style={styles.optionCard(redAgentType === "scripted", "#E04B4A")} onClick={() => setRedAgentType("scripted")}>
+                <span style={styles.optionTitle}>Scripted agent</span>
+                <span style={styles.optionDesc}>Use a built-in attacker like Meander or B-line.</span>
+              </button>
+              <button style={styles.optionCard(redAgentType === "ppo", "#9B78F0")} onClick={() => setRedAgentType("ppo")}>
+                <span style={styles.optionTitle}>Trained PPO</span>
+                <span style={styles.optionDesc}>Load a saved red PPO checkpoint.</span>
+              </button>
+            </div>
+
+            {redAgentType === "scripted" ? (
+              <select
+                style={styles.input}
+                value={redAgentKey}
+                onChange={(e) => setRedAgentKey(e.target.value)}
+              >
+                <option value="meander">Meander</option>
+                <option value="bline">B-line</option>
+                <option value="random">Random</option>
+                <option value="slowburn">Slow Burn</option>
+              </select>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div>
+                  <div style={styles.segment}>
+                    <button style={styles.segmentBtn(!redActionMasking)} onClick={() => setRedActionMasking(false)}>🚫 Masking off</button>
+                    <button style={styles.segmentBtn(redActionMasking)} onClick={() => setRedActionMasking(true)}>🎯 Masking on</button>
+                  </div>
+                  {redActionMasking && (
+                    <div style={{ ...styles.segment, marginTop: 6 }}>
+                      <button style={styles.segmentBtn(redMaskMode === "dead")} onClick={() => setRedMaskMode("dead")}>💀 Dead actions only</button>
+                      <button style={styles.segmentBtn(redMaskMode === "ladder")} onClick={() => setRedMaskMode("ladder")}>🪜 Climb the ladder</button>
+                    </div>
+                  )}
+                </div>
+                <div style={styles.segment}>
+                  <button style={styles.segmentBtn(redMode === "latest")} onClick={() => setRedMode("latest")}>Latest from training</button>
+                  <button style={styles.segmentBtn(redMode === "browse")} onClick={() => setRedMode("browse")}>Browse files</button>
+                </div>
+
+                {redMode === "latest" ? (
+                  <div>
+                    {loading ? (
+                      <div style={styles.emptyState}>Looking for checkpoints…</div>
+                    ) : redData.latest ? (
+                      <div style={styles.latestCard}>
+                        <span style={styles.latestBadge}>
+                          Latest{stepBadge(basename(redData.latest)) ? ` · ${stepBadge(basename(redData.latest))}` : ""}
+                        </span>
+                        <div style={styles.latestPath} title={redData.latest}>{redData.latest}</div>
+                      </div>
+                    ) : (
+                      <div style={styles.emptyState}>
+                        {error
+                          ? `Could not reach the backend (http://127.0.0.1:9999): ${error}`
+                          : "No checkpoints found in meander_ppo/. Train a model first, or browse for a file."}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <input
+                      style={styles.input}
+                      placeholder="Search checkpoints by name or path…"
+                      value={redSearch}
+                      onChange={(e) => setRedSearch(e.target.value)}
+                    />
+                    <div style={styles.list}>
+                      {loading ? (
+                        <div style={styles.emptyState}>Scanning project for .pth files…</div>
+                      ) : redFiltered.length === 0 ? (
+                        <div style={styles.emptyState}>
+                          {error ? `Could not reach the backend: ${error}` : "No checkpoint files found."}
+                        </div>
+                      ) : (
+                        redFiltered.map((c) => {
+                          const selected = !redCustomPath.trim() && redSelectedPath === c.path;
+                          const hovered = redHoveredPath === c.path;
+                          const badge = stepBadge(c.name);
+                          return (
+                            <div
+                              key={c.path}
+                              style={styles.listItem(selected, hovered)}
+                              onClick={() => {
+                                setRedSelectedPath(c.path);
+                                setRedCustomPath("");
+                                setRedAgentCkpt(c.path);
+                              }}
+                              onMouseEnter={() => setRedHoveredPath(c.path)}
+                              onMouseLeave={() => setRedHoveredPath(null)}
+                              title={c.path}
+                            >
+                              <div style={styles.itemMain}>
+                                <span style={styles.itemName}>{c.name}</span>
+                                <span style={styles.itemPath}>{c.relPath}</span>
+                              </div>
+                              <div style={styles.itemMeta}>
+                                {badge && <span style={styles.itemBadge}>{badge}</span>}
+                                {maskBadge(c) && <span style={styles.itemBadge}>{maskBadge(c)}</span>}
+                                <span style={{ ...styles.itemBadge, color: teamColor(c.team), background: `${teamColor(c.team)}18`, border: `1px solid ${teamColor(c.team)}33` }}>{teamLabel(c.team)}</span>
+                                <span style={styles.itemTime}>{fmtAgo(c.mtime)}</span>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    <div style={styles.dividerRow}>
+                      <span style={styles.dividerLine} />
+                      <span style={styles.dividerText}>or enter a path</span>
+                      <span style={styles.dividerLine} />
+                    </div>
+
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <input
+                        style={{ ...styles.input, flex: 1 }}
+                        placeholder="/absolute/path/to/checkpoint.pth"
+                        value={redAgentCkpt}
+                        onChange={(e) => {
+                          setRedAgentCkpt(e.target.value);
+                          setRedSelectedPath("");
+                          setRedCustomPath(e.target.value);
+                        }}
+                      />
+                      <button
+                        style={{ ...styles.cancelBtn, padding: "0 12px", minWidth: 42 }}
+                        onClick={() => setBrowserOpen(true)}
+                        title="Browse checkpoints"
+                      >⋯</button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -283,6 +551,18 @@ export default function EvaluateModal({ onClose, onRun }) {
           <button style={styles.runBtn(!canRun)} onClick={handleRun} disabled={!canRun}>Run evaluation</button>
         </div>
       </div>
+
+      {browserOpen && (
+        <FileBrowserModal
+          mode="file"
+          initialPath={redAgentCkpt || ""}
+          onSelect={(path) => {
+            setRedAgentCkpt(path);
+            setBrowserOpen(false);
+          }}
+          onClose={() => setBrowserOpen(false)}
+        />
+      )}
     </div>
   );
 }

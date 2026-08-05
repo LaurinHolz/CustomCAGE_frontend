@@ -200,12 +200,17 @@ export default function App() {
 
   const handleVerify = () => setVerifyModalOpen(true);
 
-  const runEvaluate = async ({ ckptPath, numEpisodes, maxTimesteps }) => {
+  const runEvaluate = async ({ ckptPath, numEpisodes, maxTimesteps, redAgent, actionMasking }) => {
     try {
       const params = new URLSearchParams();
       if (ckptPath) params.set("ckpt_path", ckptPath);
       params.set("num_episodes", String(numEpisodes));
       params.set("max_timesteps", String(maxTimesteps));
+      if (redAgent) params.set("red_agent", JSON.stringify(redAgent));
+      // Unset (null/undefined) means "match how the checkpoint was trained" — see evaluate_agent.
+      if (actionMasking !== null && actionMasking !== undefined) {
+        params.set("action_masking", String(actionMasking));
+      }
 
       const res = await fetch(`http://127.0.0.1:9999/evaluate?${params.toString()}`, {
         method: "POST",

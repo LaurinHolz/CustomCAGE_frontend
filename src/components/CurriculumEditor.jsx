@@ -988,6 +988,57 @@ export default function CurriculumEditor({ initialCurriculum, hostCount, onApply
                     </div>
                   )}
 
+                  {selTrains && selected.role === "defender" && (
+                    <div>
+                      <div style={S.label}>Action masking</div>
+                      <div style={S.segment}>
+                        <button style={S.segBtn(BLUE, !selected.actionMasking)}
+                          onClick={() => patch(selected.id, { actionMasking: false })}>Allow any action</button>
+                        <button style={S.segBtn(BLUE, !!selected.actionMasking)}
+                          onClick={() => patch(selected.id, { actionMasking: true })}>Only useful actions</button>
+                      </div>
+                      <p style={{ margin: "6px 0 0 0", fontSize: 10.5, color: TEXT_SECONDARY }}>
+                        When set to <strong>only useful actions</strong>, this defender can never pick a
+                        move that couldn't possibly do anything right now — e.g. analysing a host it
+                        already fully understands, or placing a decoy after its one-time setup window has
+                        passed. It doesn't grant new abilities, it just stops the agent wasting a turn on a
+                        choice that was always going to do nothing, which helps it learn faster. It does{" "}
+                        <strong>not</strong> change the decoy setup-window rule itself — that rule always
+                        applies either way; this only controls whether the agent is offered decoys as a
+                        choice once the window has closed.
+                      </p>
+                    </div>
+                  )}
+
+                  {selTrains && selected.role === "attacker" && selected.kind !== "scripted" && (
+                    <div>
+                      <div style={S.label}>Action masking</div>
+                      <div style={S.segment}>
+                        <button style={S.segBtn(RED, !selected.actionMasking)}
+                          onClick={() => patch(selected.id, { actionMasking: false })}>🚫 Off</button>
+                        <button style={S.segBtn(RED, !!selected.actionMasking)}
+                          onClick={() => patch(selected.id, { actionMasking: true })}>🎯 On</button>
+                      </div>
+                      {selected.actionMasking && (
+                        <div style={{ marginTop: 8 }}>
+                          <div style={S.segment}>
+                            <button style={S.segBtn(RED, (selected.maskMode || "dead") === "dead")}
+                              onClick={() => patch(selected.id, { maskMode: "dead" })}>💀 Dead actions only</button>
+                            <button style={S.segBtn(RED, selected.maskMode === "ladder")}
+                              onClick={() => patch(selected.id, { maskMode: "ladder" })}>🪜 Climb the ladder</button>
+                          </div>
+                        </div>
+                      )}
+                      <p style={{ margin: "6px 0 0 0", fontSize: 10.5, color: TEXT_SECONDARY }}>
+                        Restricts this attacker to a valid-action subset each step.
+                        <strong> Dead actions only</strong> rules out actions that can never do anything
+                        (e.g. escalating a host it hasn't touched yet); <strong>climb the ladder</strong> also
+                        forces it to progress one stage at a time (scan → exploit → escalate → impact)
+                        instead of skipping ahead.
+                      </p>
+                    </div>
+                  )}
+
                   {selected.role === "attacker" && (
                     <div style={S.divider}><span style={S.divLine} /><span style={S.divText}>or</span><span style={S.divLine} /></div>
                   )}
