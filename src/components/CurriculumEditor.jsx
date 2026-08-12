@@ -413,6 +413,34 @@ export default function CurriculumEditor({ initialCurriculum, hostCount, onApply
   // the trained agent faces a *pool* (more than one) to choose between.
   const selOpponents = selected ? opponentsOf(selected.id, nodesById, edges) : [];
 
+  // path -> {actionMasking, maskMode}, fetched on demand per checkpoint (not
+  // a bulk /checkpoints listing - this project has accumulated thousands of
+  // checkpoint files, and that endpoint's most-recently-modified-first cap
+  // can easily leave out an older-but-relevant one, e.g. a round's final
+  // trained/ output). Never written into the node itself - stays live/correct
+  // even for a checkpoint retrained later, rather than freezing a snapshot.
+  const [ckptMetaByPath, setCkptMetaByPath] = useState({});
+  const ckptMetaRequested = useRef(new Set());
+  useEffect(() => {
+    const path = selected?.kind === "ppo" ? selected.ckpt : null;
+    if (!path || ckptMetaRequested.current.has(path)) return;
+    ckptMetaRequested.current.add(path);
+    fetch(`http://127.0.0.1:9999/checkpoint-meta?path=${encodeURIComponent(path)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((meta) => { if (meta) setCkptMetaByPath((m) => ({ ...m, [path]: meta })); })
+      .catch(() => {});
+  }, [selected?.ckpt, selected?.kind]);
+
+  // What "unset" masking currently resolves to for selected's own checkpoint
+  // (its starting checkpoint if it's the learner, else the opponent's own) -
+  // undefined for scratch/scripted/a not-yet-trained "ref". Used to *display*
+  // the real value on the toggle without writing it into the node, so it
+  // stays live/correct rather than freezing today's snapshot (see fetch above).
+  const selCkptMeta = selected?.kind === "ppo" ? ckptMetaByPath[selected.ckpt] : undefined;
+  const effMasking = selected ? (selected.actionMasking ?? selCkptMeta?.actionMasking ?? false) : false;
+  const effMaskMode = selected ? (selected.maskMode || selCkptMeta?.maskMode || "dead") : "dead";
+  const maskingIsAuto = !!selected && selected.actionMasking == null && !!selCkptMeta;
+
   // ── "Needs attention" detection — drives the amber connect-me pulses ──
   // A node pulses if it isn't fully configured yet, or has no opposite-role
   // opponent to train against. Each reason becomes a line in its tooltip.
@@ -990,11 +1018,13 @@ export default function CurriculumEditor({ initialCurriculum, hostCount, onApply
 
                   {selTrains && selected.role === "defender" && (
                     <div>
-                      <div style={S.label}>Action masking</div>
+                      <div style={S.label}>
+                        Action masking{maskingIsAuto && <span style={{ color: TEXT_SECONDARY, fontWeight: 400 }}> (auto, from this checkpoint)</span>}
+                      </div>
                       <div style={S.segment}>
-                        <button style={S.segBtn(BLUE, !selected.actionMasking)}
+                        <button style={S.segBtn(BLUE, !effMasking)}
                           onClick={() => patch(selected.id, { actionMasking: false })}>Allow any action</button>
-                        <button style={S.segBtn(BLUE, !!selected.actionMasking)}
+                        <button style={S.segBtn(BLUE, effMasking)}
                           onClick={() => patch(selected.id, { actionMasking: true })}>Only useful actions</button>
                       </div>
                       <p style={{ margin: "6px 0 0 0", fontSize: 10.5, color: TEXT_SECONDARY }}>
@@ -1005,26 +1035,31 @@ export default function CurriculumEditor({ initialCurriculum, hostCount, onApply
                         choice that was always going to do nothing, which helps it learn faster. It does{" "}
                         <strong>not</strong> change the decoy setup-window rule itself — that rule always
                         applies either way; this only controls whether the agent is offered decoys as a
-                        choice once the window has closed.
+                        choice once the window has closed.{" "}
+                        {maskingIsAuto
+                          ? "Shown above is what this checkpoint was actually trained with — pick a side explicitly to override it."
+                          : "Untouched, this defaults to however the starting checkpoint (if any) was actually trained."}
                       </p>
                     </div>
                   )}
 
                   {selTrains && selected.role === "attacker" && selected.kind !== "scripted" && (
                     <div>
-                      <div style={S.label}>Action masking</div>
+                      <div style={S.label}>
+                        Action masking{maskingIsAuto && <span style={{ color: TEXT_SECONDARY, fontWeight: 400 }}> (auto, from this checkpoint)</span>}
+                      </div>
                       <div style={S.segment}>
-                        <button style={S.segBtn(RED, !selected.actionMasking)}
+                        <button style={S.segBtn(RED, !effMasking)}
                           onClick={() => patch(selected.id, { actionMasking: false })}>🚫 Off</button>
-                        <button style={S.segBtn(RED, !!selected.actionMasking)}
+                        <button style={S.segBtn(RED, effMasking)}
                           onClick={() => patch(selected.id, { actionMasking: true })}>🎯 On</button>
                       </div>
-                      {selected.actionMasking && (
+                      {effMasking && (
                         <div style={{ marginTop: 8 }}>
                           <div style={S.segment}>
-                            <button style={S.segBtn(RED, (selected.maskMode || "dead") === "dead")}
+                            <button style={S.segBtn(RED, effMaskMode === "dead")}
                               onClick={() => patch(selected.id, { maskMode: "dead" })}>💀 Dead actions only</button>
-                            <button style={S.segBtn(RED, selected.maskMode === "ladder")}
+                            <button style={S.segBtn(RED, effMaskMode === "ladder")}
                               onClick={() => patch(selected.id, { maskMode: "ladder" })}>🪜 Climb the ladder</button>
                           </div>
                         </div>
@@ -1034,7 +1069,10 @@ export default function CurriculumEditor({ initialCurriculum, hostCount, onApply
                         <strong> Dead actions only</strong> rules out actions that can never do anything
                         (e.g. escalating a host it hasn't touched yet); <strong>climb the ladder</strong> also
                         forces it to progress one stage at a time (scan → exploit → escalate → impact)
-                        instead of skipping ahead.
+                        instead of skipping ahead.{" "}
+                        {maskingIsAuto
+                          ? "Shown above is what this checkpoint was actually trained with — pick a side explicitly to override it."
+                          : "Untouched, this defaults to however the starting checkpoint (if any) was actually trained."}
                       </p>
                     </div>
                   )}
@@ -1099,6 +1137,55 @@ export default function CurriculumEditor({ initialCurriculum, hostCount, onApply
                             </button>
                           );
                         })}
+                      </div>
+                    </div>
+                  )}
+
+                  {!selTrains && selected.kind !== "scripted" && selected.kind !== "scratch" && (
+                    <div>
+                      <div style={S.divider}><span style={S.divLine} /><span style={S.divText}>as a fixed opponent here</span><span style={S.divLine} /></div>
+
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={S.label}>
+                          Action masking{maskingIsAuto && <span style={{ color: TEXT_SECONDARY, fontWeight: 400 }}> (auto, from this checkpoint)</span>}
+                        </div>
+                        <div style={S.segment}>
+                          <button style={S.segBtn(selected.role === "defender" ? BLUE : RED, !effMasking)}
+                            onClick={() => patch(selected.id, { actionMasking: false })}>🚫 Off</button>
+                          <button style={S.segBtn(selected.role === "defender" ? BLUE : RED, effMasking)}
+                            onClick={() => patch(selected.id, { actionMasking: true })}>🎯 On</button>
+                        </div>
+                        {selected.role === "attacker" && effMasking && (
+                          <div style={{ marginTop: 8 }}>
+                            <div style={S.segment}>
+                              <button style={S.segBtn(RED, effMaskMode === "dead")}
+                                onClick={() => patch(selected.id, { maskMode: "dead" })}>💀 Dead actions only</button>
+                              <button style={S.segBtn(RED, effMaskMode === "ladder")}
+                                onClick={() => patch(selected.id, { maskMode: "ladder" })}>🪜 Climb the ladder</button>
+                            </div>
+                          </div>
+                        )}
+                        <p style={{ margin: "6px 0 0 0", fontSize: 10.5, color: TEXT_SECONDARY }}>
+                          {maskingIsAuto
+                            ? "Shown above is what this checkpoint was actually trained with — pick a side explicitly to override it for this matchup."
+                            : "Until you pick one explicitly, this falls back to however the checkpoint was actually trained (its own saved record) — set it here only to override that for this specific matchup."}
+                        </p>
+                      </div>
+
+                      <div>
+                        <div style={S.label}>Action selection</div>
+                        <div style={S.segment}>
+                          <button style={S.segBtn(selected.role === "defender" ? BLUE : RED, selected.deterministic !== false)}
+                            onClick={() => patch(selected.id, { deterministic: true })}>🎯 Greedy</button>
+                          <button style={S.segBtn(selected.role === "defender" ? BLUE : RED, selected.deterministic === false)}
+                            onClick={() => patch(selected.id, { deterministic: false })}>🎲 Stochastic</button>
+                        </div>
+                        <p style={{ margin: "6px 0 0 0", fontSize: 10.5, color: TEXT_SECONDARY }}>
+                          <strong>Greedy</strong> (the historical default) always plays this opponent's single
+                          best action every step; <strong>stochastic</strong> samples from its own policy
+                          distribution instead, exposing whoever trains against it to a wider range of this
+                          opponent's behavior rather than always the same deterministic response.
+                        </p>
                       </div>
                     </div>
                   )}

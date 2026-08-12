@@ -24,6 +24,8 @@ import SimFVGap from "./components/SimFVGap";
 import EvaluateModal from "./components/EvaluateModal";
 import VerifyModal from "./components/VerificationConfig";
 import TrainModal from "./components/TrainModal";
+import ResumeModal from "./components/ResumeModal";
+import RedVerifyModal from "./components/RedVerifyModal";
 import TrainingJobsInfo from "./components/TrainingJobsInfo";
 import { fetchGpuInfo } from "./components/CurriculumEditor";
 import ToggleSwitch from "./components/ToggleSwitch";
@@ -50,6 +52,7 @@ export default function App() {
   const [isTraining, setIsTraining]         = useState(false);
   const [screenshotsEnabled, setScreenshotsEnabled] = useState(false);
   const [trainModalOpen, setTrainModalOpen] = useState(false);
+  const [resumeModalOpen, setResumeModalOpen] = useState(false);
   // Snapshot of what's being trained (curriculum + free GPUs + total episodes),
   // captured at Train-click; drives the ⓘ jobs/progress panel in the header.
   const [trainCtx, setTrainCtx] = useState(null);
@@ -62,6 +65,7 @@ export default function App() {
   const [visualizerOn, setVisualizerOn] = useState(false);
   const [evalModalOpen, setEvalModalOpen] = useState(false);
   const [verifyModalOpen, setVerifyModalOpen] = useState(false);
+  const [redVerifyModalOpen, setRedVerifyModalOpen] = useState(false);
   const [evalState, setEvalState] = useState("idle"); // "idle" | "running" | "done"
   const [verifySignal, setVerifySignal] = useState(0);
   const [verificationView, setVerificationView] = useState("bfs");
@@ -159,7 +163,7 @@ export default function App() {
     showToast("JSON downloaded");
   };
 
-  const runTrain = async ({ curriculum, ckptDir, maxEpisodes, maxTimesteps, makeVideo }) => {
+  const runTrain = async ({ curriculum, ckptDir, maxEpisodes, maxTimesteps, makeVideo, resumeDir }) => {
     try {
       const res = await fetch("http://127.0.0.1:9999/train-curriculum", {
         method: "POST",
@@ -170,21 +174,25 @@ export default function App() {
           ckptDir,
           maxEpisodes,
           maxTimesteps,
+          resumeDir,
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setIsTraining(true);
       setScreenshotsEnabled(!!makeVideo);
       setTrainModalOpen(false);
+      setResumeModalOpen(false);
       // Snapshot the free GPUs the backend will schedule against, so the ⓘ panel
       // previews the same job→GPU distribution the run actually uses.
       const gi = await fetchGpuInfo();
       setTrainCtx({ curriculum, maxEpisodes, gpuFree: gi.free || [] });
-      showToast("Training started ✓");
+      showToast(resumeDir ? "Resumed training ✓" : "Training started ✓");
     } catch (err) {
       showToast(`Failed: ${err.message}`);
     }
   };
+
+  const runResume = (args) => runTrain({ ...args, makeVideo: false });
 
   const handleStopTraining = async () => {
     try {
@@ -299,8 +307,19 @@ export default function App() {
             style={{ ...S.btn, ...(isTraining ? { background: '#E24B4A', color: '#fff', border: 'none' } : S.btnSuccess) }}
             onClick={isTraining ? handleStopTraining : () => setTrainModalOpen(true)}
           >{isTraining ? "Stop" : "Train"}</button>
+          <button
+            style={S.btn}
+            disabled={isTraining}
+            title={isTraining ? "Stop the current run first" : "Continue an interrupted curriculum run"}
+            onClick={() => setResumeModalOpen(true)}
+          >Resume</button>
           <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleEvaluate}>Evaluate</button>
           <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleVerify}>Verify</button>
+          <button
+            style={S.btn}
+            title="Verify a trained blue policy against a trained red policy (RedVerification pipeline)"
+            onClick={() => setRedVerifyModalOpen(true)}
+          >Red-verify</button>
           <ToggleSwitch
             checked={visualizerOn}
             onToggle={handleToggleVisualizer}
@@ -516,6 +535,15 @@ export default function App() {
           onRun={runTrain}
           hostCount={state.hosts?.length || 0}
         />
+      )}
+      {resumeModalOpen && (
+        <ResumeModal
+          onClose={() => setResumeModalOpen(false)}
+          onResume={runResume}
+        />
+      )}
+      {redVerifyModalOpen && (
+        <RedVerifyModal onClose={() => setRedVerifyModalOpen(false)} />
       )}
       {evalModalOpen && (
         <EvaluateModal

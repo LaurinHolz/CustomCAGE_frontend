@@ -156,12 +156,6 @@ const styles = {
 const BLUE = "#3B8BD4";
 const RED  = "#E04B4A";
 
-function dirOf(p) {
-  if (!p) return "";
-  const i = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
-  return i > 0 ? p.slice(0, i) : "";
-}
-
 function inferEpisode(name) {
   const m = name.match(/^(\d+)\.pth$/);
   return m ? parseInt(m[1], 10) : null;
@@ -242,7 +236,11 @@ export default function TrainModal({ onClose, onRun, hostCount }) {
 
   const mode         = trainedCkptPath ? "continue" : "scratch";
   const startEpisode = trainedCkptPath ? (inferEpisode(basename(trainedCkptPath)) ?? 1) : 1;
-  const autoSaveDir  = dirOf(trainedCkptPath);
+  // Defaults to a fresh output/ location rather than nesting inside wherever
+  // the loaded checkpoint happens to live - that used to be silent/automatic
+  // and produced runs buried arbitrarily deep inside earlier ones. Same-folder
+  // nesting is still available, just opt-in via the override field below.
+  const autoSaveDir  = "output";
   const saveDir      = mode === "scratch" ? ckptDir : (saveDirOverride.trim() || autoSaveDir);
   const maxEp        = Math.max(1, parseInt(maxEpisodes, 10) || 100000);
   const episodeValid = mode !== "continue" || maxEp > startEpisode;
@@ -471,13 +469,13 @@ export default function TrainModal({ onClose, onRun, hostCount }) {
               <div style={styles.inputRow}>
                 <input
                   style={{ ...styles.input, flex: 1 }}
-                  placeholder={autoSaveDir || "same directory as checkpoint"}
+                  placeholder={autoSaveDir}
                   value={saveDirOverride}
                   onChange={(e) => setSaveDirOverride(e.target.value)}
                 />
                 <button style={styles.browseBtn} title="Browse…" onClick={() => setBrowser({ target: "saveDir" })}>⋯</button>
               </div>
-              <p style={styles.hint}>Leave blank to save alongside the loaded checkpoint.</p>
+              <p style={styles.hint}>Leave blank to save under {autoSaveDir}/. Enter a path to save alongside the loaded checkpoint or elsewhere instead.</p>
             </div>
           )}
 
