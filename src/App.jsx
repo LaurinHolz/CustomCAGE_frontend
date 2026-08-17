@@ -250,6 +250,8 @@ export default function App() {
   topK,
   partialObservability,
   fvApproach,
+  partitionApproach,
+  numPartitions,
 }) => {
   try {
     const params = new URLSearchParams();
@@ -269,12 +271,22 @@ export default function App() {
     );
     params.set("fv_approach", fvApproach);
 
+    if (partitionApproach) {
+      params.set("partition_approach", partitionApproach);
+    }
+
+    if (numPartitions != null) {
+      params.set("number_partitions", String(numPartitions));
+    }
+
     console.log("Verification parameters:", {
       ckptPath,
       heuristicAgent,
       topK,
       partialObservability,
       fvApproach,
+      partitionApproach,
+      numPartitions,
     });
 
     const res = await fetch(

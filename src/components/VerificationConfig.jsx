@@ -40,7 +40,12 @@ const FV_APPROACHES = [
   { id: "free-dyna", sub: "unrestricted · dynamic" },
   { id: "fix-dyna", sub: "fixed · dynamic" },
   { id: "free-dyna-partioned", sub: "unrestricted · dynamic · partitioned" },
-  { id: "free-dyna-fine_grained", sub: "unrestricted · dynamic · fine-grained" },
+];
+
+const PARTITION_APPROACHES = [
+  { value: "subnet", label: "Subnet", needsK: false },
+  { value: "balanced-random", label: "Balanced-Random", needsK: true },
+  { value: "METIS", label: "METIS", needsK: true },
 ];
 
 const styles = {
@@ -188,6 +193,10 @@ export default function VerifyModal({ onClose, onVerify }) {
   const [obsCustom, setObsCustom] = useState("");
   const [fvApproach, setFvApproach] = useState("free-mono");
 
+  // Partitioning controls (only relevant for free-dyna-partioned)
+  const [partitionApproach, setPartitionApproach] = useState("METIS");
+  const [numPartitions, setNumPartitions] = useState(4);
+
   const load = useCallback(() => {
     fetch(CHECKPOINTS_URL)
       .then((res) => {
@@ -232,9 +241,18 @@ export default function VerifyModal({ onClose, onVerify }) {
     ? !!selectedHeuristic
     : !loading && !!chosenPath;
 
+  const isPartitioned = fvApproach === "free-dyna-partioned";
+  const approachMeta = PARTITION_APPROACHES.find((a) => a.value === partitionApproach);
+  const numPartValue = parseInt(numPartitions, 10);
+  const numPartValid = Number.isFinite(numPartValue) && numPartValue >= 1;
+
+  // Number of partitions only matters for approaches that take k.
+  const partitionValid = !isPartitioned || !approachMeta.needsK || numPartValid;
+
   const canRun = blueAgentValid
     && obsValid
-    && (mode === "heuristic" || topKValid);
+    && (mode === "heuristic" || topKValid)
+    && partitionValid;
 
   const handleRun = () => {
     if (!canRun) return;
@@ -245,6 +263,9 @@ export default function VerifyModal({ onClose, onVerify }) {
       topK: mode === "heuristic" ? 1 : topKValue,
       partialObservability: obsValue,
       fvApproach,
+      // Only send partition config when it's relevant; subnet ignores k.
+      partitionApproach: isPartitioned ? partitionApproach : null,
+      numPartitions: isPartitioned && approachMeta.needsK ? numPartValue : null,
     });
   };
 
@@ -468,6 +489,47 @@ export default function VerifyModal({ onClose, onVerify }) {
               Placement (unrestricted / fixed) × construction (monolithic / dynamic).
             </p>
           </div>
+
+          {/* ---- Partitioning (only for free-dyna-partioned) ---- */}
+          {isPartitioned && (
+            <div>
+              <div style={styles.sectionLabel}>Partitioning</div>
+              <div style={styles.pillRow}>
+                {PARTITION_APPROACHES.map((a) => {
+                  const active = partitionApproach === a.value;
+                  return (
+                    <button
+                      key={a.value}
+                      style={styles.pill(active)}
+                      onClick={() => setPartitionApproach(a.value)}
+                    >
+                      {a.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {approachMeta.needsK && (
+                <div style={{ ...styles.numberField, marginTop: 12 }}>
+                  <label style={styles.numberLabel}>Number of partitions</label>
+                  <input
+                    style={styles.input} type="number" min="1" step="1"
+                    value={numPartitions}
+                    onChange={(e) => setNumPartitions(e.target.value)}
+                  />
+                </div>
+              )}
+
+              <p style={styles.helperText}>
+                {partitionApproach === "subnet"
+                  ? "One partition per subnet — partitions respect subnet boundaries, so the decomposition is exact by construction."
+                  : "Attack-graph partitioning via " + approachMeta.label + ". May split subnets; cross-partition discovery is handled by synchronized transitions."}
+              </p>
+              {approachMeta.needsK && !numPartValid && (
+                <p style={styles.errorText}>Number of partitions must be an integer ≥ 1.</p>
+              )}
+            </div>
+          )}
         </div>
 
         <div style={styles.footer}>
