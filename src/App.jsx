@@ -247,6 +247,7 @@ export default function App() {
   const runVerify = async ({
   ckptPath,
   heuristicAgent,
+  fv_horizon,
   topK,
   partialObservability,
   fvApproach,
@@ -264,30 +265,48 @@ export default function App() {
       params.set("heuristic_agent", heuristicAgent);
     }
 
+    // FV horizon
+    params.set("fv_horizon", String(fv_horizon));
+
+    // Policy
     params.set("top_k", String(topK));
+
+    // Partial observability
     params.set(
       "partial_observability",
       String(partialObservability)
     );
+
+    // FV approach
     params.set("fv_approach", fvApproach);
 
+    // Partitioning
     if (partitionApproach) {
       params.set("partition_approach", partitionApproach);
     }
 
     if (numPartitions != null) {
-      params.set("number_partitions", String(numPartitions));
+      params.set(
+        "number_partitions",
+        String(numPartitions)
+      );
     }
 
     console.log("Verification parameters:", {
       ckptPath,
       heuristicAgent,
+      fv_horizon,
       topK,
       partialObservability,
       fvApproach,
       partitionApproach,
       numPartitions,
     });
+
+    console.log(
+      "Verification URL:",
+      `http://127.0.0.1:9999/verify?${params.toString()}`
+    );
 
     const res = await fetch(
       `http://127.0.0.1:9999/verify?${params.toString()}`,
@@ -302,7 +321,9 @@ export default function App() {
 
     if (!res.ok) {
       const message = await res.text();
-      throw new Error(message || `HTTP ${res.status}`);
+      throw new Error(
+        message || `HTTP ${res.status}`
+      );
     }
 
     setVerifyModalOpen(false);

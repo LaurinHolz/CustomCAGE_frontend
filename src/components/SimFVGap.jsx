@@ -46,7 +46,7 @@ const COMPARISON_METRICS = [
     simMeanKey: "reward",
     simStdKey: "reward_std",
     simNKey: "reward_n",
-    simDivisor: SIMULATION_STEPS_PER_EPISODE,
+    simDivisorKey: "max_timesteps",
     fvMeanKey: "mean_reward_per_step_mean",
     fvStdKey: "mean_reward_per_step_std",
     fvNKey: "mean_reward_per_step_n",
@@ -570,7 +570,9 @@ export default function SimFVGap() {
 
   const rows = useMemo(() => {
     return COMPARISON_METRICS.map((metric) => {
-      const simDivisor = normalizeNumber(metric.simDivisor) ?? 1;
+      const simDivisor = metric.simDivisorKey
+      ? normalizeNumber(simData?.[metric.simDivisorKey]) ?? 1
+      : normalizeNumber(metric.simDivisor) ?? 1;
 
       const rawSimMean = metric.simMeanKey
         ? normalizeNumber(simData?.[metric.simMeanKey])
