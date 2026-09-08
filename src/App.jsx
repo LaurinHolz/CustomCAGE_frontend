@@ -8,6 +8,7 @@ import {CAGE2_ADD_SERVER_PRESET} from "./data/cage2_add_server_preset.js";
 import { CAGE2_150_PRESET} from "./data/cage2_1_5_preset.js";
 import { CAGE2_200_PRESET} from "./data/cage2_2_preset.js";
 import { CAGE2_250_PRESET} from "./data/cage2_25_preset.js";
+import { STAR_PRESET} from "./data/star_preset.js";
 import {S} from "./styles/styles"
 import { HOST_W, HOST_H, ZONE_W, ZONE_H, ZONE_PAD } from "./constants/layout";
 import { uid } from "./utils/ids";
@@ -112,6 +113,9 @@ export default function App() {
   } else if (val == "cage2_250") {
     setState(JSON.parse(JSON.stringify(CAGE2_250_PRESET)))
     showToast("Loaded 2.5x CAGE-2")
+  } else if (val == "star") {
+    setState(JSON.parse(JSON.stringify(STAR_PRESET)))
+    showToast("Loaded Star Preset")
   } else if (val === "empty") {
     setState(makeEmpty());
     showToast("Loaded empty canvas");
@@ -381,6 +385,7 @@ export default function App() {
             <option value="cage2_150">1.5x CAGE-2</option>
             <option value="cage2_200">2.0x CAGE-2</option>
             <option value="cage2_250">2.5x CAGE-2</option>
+            <option value={"star"}>STAR PRESET</option>
             <option value="empty">Empty (Custom)</option>
           </select>
           <button style={{ ...S.btn, ...S.btnSuccess }} onClick={handleDownload}>Download JSON</button>
