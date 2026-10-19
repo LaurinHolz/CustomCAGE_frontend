@@ -7,6 +7,21 @@ import CurriculumEditor, {
 const TEXT_PRIMARY   = "var(--color-text-primary, #f5f5f5)";
 const TEXT_SECONDARY = "var(--color-text-secondary, rgba(255,255,255,0.55))";
 
+const DEFAULT_COSTS = {
+  sleep: 0.0,
+  analyse: 0.0,
+  decoy: 0.0,
+  remove: 0.0,
+  restore: -1.0,
+};
+
+const DEFAULT_WEIGHTS = {
+  betweenness: 1,
+  distance: 1,
+  successors: 1,
+  gateway: 1,
+};
+
 const styles = {
   overlay: {
     position: "fixed", inset: 0, background: "rgba(8,9,14,0.6)",
@@ -167,7 +182,7 @@ function inferEpisode(name) {
   return m ? parseInt(m[1], 10) : null;
 }
 
-export default function TrainModal({ onClose, onRun, hostCount }) {
+export default function TrainModal({ onClose, onRun, hostCount, state }) {
   const [curriculum, setCurriculum] = useState(DEFAULT_CURRICULUM);
   const [editorOpen, setEditorOpen] = useState(false);
   const [curriculumEditingEnabled, setCurriculumEditingEnabled] = useState(false);
@@ -266,6 +281,8 @@ export default function TrainModal({ onClose, onRun, hostCount }) {
       maxEpisodes:  maxEp,
       maxTimesteps: Math.max(1, parseInt(maxTimesteps, 10) || 100),
       makeVideo,
+      actionCosts: state?.actionCosts || DEFAULT_COSTS,
+      weights:     state?.weights || DEFAULT_WEIGHTS,
     });
   };
 

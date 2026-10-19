@@ -2,7 +2,31 @@ import { S } from "../styles/styles";
 
 const PROB_PRESETS = [0.5, 0.75, 0.9, 0.95, 1.0];
 
+const DEFAULT_COSTS = {
+  sleep: 0.0,
+  analyse: 0.0,
+  decoy: 0.0,
+  remove: 0.0,
+  restore: -1.0,
+};
+
+const DEFAULT_WEIGHTS = {
+  betweenness: 1,
+  distance: 1,
+  successors: 1,
+  gateway: 1,
+};
+
 export default function ConfigPanel({ state, setState }) {
+  const costs = state.actionCosts || DEFAULT_COSTS;
+  const weights = state.weights || DEFAULT_WEIGHTS;
+
+  const weightLabels = {
+    betweenness: "Betweenness",
+    distance: "Distance",
+    successors: "Successors",
+    gateway: "Gateway",
+  };
 
   // ── Helpers ────────────────────────────────────────────────────────
 
@@ -192,6 +216,92 @@ export default function ConfigPanel({ state, setState }) {
       {/* ── Actions ── */}
       {renderList("Red actions", "redActions", "#E24B4A")}
       {renderList("Blue actions", "blueActions", "#3B8BD4")}
+
+      <div style={S.divider}/>
+
+      {/* ── Blue Action Costs ── */}
+      <div style={S.section}>
+        <label style={S.label}>Blue Action Costs</label>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: 8, marginTop: 6 }}>
+          {Object.entries(DEFAULT_COSTS).map(([action, defaultVal]) => (
+            <div key={action} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+              <span style={{ fontSize: 10, color: "var(--color-text-secondary)", textTransform: "capitalize" }}>
+                {action}
+              </span>
+              <input
+                type="number"
+                step="0.1"
+                min="-100"
+                style={{ ...S.input, width: "100%", padding: "4px 6px", fontSize: 11 }}
+                value={costs[action] ?? defaultVal}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === "" || val === "-") {
+                    setState((s) => ({
+                      ...s,
+                      actionCosts: {
+                        ...(s.actionCosts || DEFAULT_COSTS),
+                        [action]: val,
+                      },
+                    }));
+                    return;
+                  }
+                  const parsed = parseFloat(val);
+                  setState((s) => ({
+                    ...s,
+                    actionCosts: {
+                      ...(s.actionCosts || DEFAULT_COSTS),
+                      [action]: isNaN(parsed) ? 0 : parsed,
+                    },
+                  }));
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Weights ── */}
+      <div style={S.section}>
+        <label style={S.label}>Weights</label>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 8, marginTop: 6 }}>
+          {Object.entries(DEFAULT_WEIGHTS).map(([key, defaultVal]) => (
+            <div key={key} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+              <span style={{ fontSize: 10, color: "var(--color-text-secondary)" }}>
+                {weightLabels[key] || key}
+              </span>
+              <input
+                type="number"
+                step="0.1"
+                min="-100"
+                style={{ ...S.input, width: "100%", padding: "4px 6px", fontSize: 11 }}
+                value={weights[key] ?? defaultVal}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === "" || val === "-") {
+                    setState((s) => ({
+                      ...s,
+                      weights: {
+                        ...(s.weights || DEFAULT_WEIGHTS),
+                        [key]: val,
+                      },
+                    }));
+                    return;
+                  }
+                  const parsed = parseFloat(val);
+                  setState((s) => ({
+                    ...s,
+                    weights: {
+                      ...(s.weights || DEFAULT_WEIGHTS),
+                      [key]: isNaN(parsed) ? 0 : parsed,
+                    },
+                  }));
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div style={S.divider}/>
 

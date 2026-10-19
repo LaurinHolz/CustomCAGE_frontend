@@ -8,12 +8,12 @@ import {CAGE2_ADD_SERVER_PRESET} from "./data/cage2_add_server_preset.js";
 import { CAGE2_150_PRESET} from "./data/cage2_1_5_preset.js";
 import { CAGE2_200_PRESET} from "./data/cage2_2_preset.js";
 import { CAGE2_250_PRESET} from "./data/cage2_25_preset.js";
-import {S} from "./styles/styles"
+import {S} from "./styles/styles";
 import { HOST_W, HOST_H, ZONE_W, ZONE_H, ZONE_PAD } from "./constants/layout";
 import { uid } from "./utils/ids";
 import { exportToBackendFormat, downloadJSON } from "./utils/exportBackend";
 import TopologyCanvas from "./components/TopologyCanvas";
-import AttackGraphCanvas from "./components/AttackGraphCanvas"
+import AttackGraphCanvas from "./components/AttackGraphCanvas";
 import DetailSidebar from "./components/DetailSidebar";
 import OverviewPanel from "./components/OverviewPanel";
 import ConfigPanel from "./components/ConfigPanel";
@@ -39,6 +39,21 @@ const VERIFICATION_OPTIONS = [
   { key: "statistics", label: "Statistics"},
   { key: "sim-fv-gap", label: "Sim-FV Gap" },
 ];
+
+const DEFAULT_COSTS = {
+  sleep: 0.0,
+  analyse: 0.0,
+  decoy: 0.0,
+  remove: 0.0,
+  restore: -1.0,
+};
+
+const DEFAULT_WEIGHTS = {
+  betweenness: 1,
+  distance: 1,
+  successors: 1,
+  gateway: 1,
+};
 
 // ─── Main App ─────────────────────────────────────────────────────
 export default function App() {
@@ -171,13 +186,17 @@ export default function App() {
     showToast("JSON downloaded");
   };
 
-  const runTrain = async ({ curriculum, ckptDir, maxEpisodes, maxTimesteps, makeVideo }) => {
+  const runTrain = async ({ curriculum, ckptDir, maxEpisodes, maxTimesteps, makeVideo, actionCosts, weights }) => {
     try {
       const res = await fetch("http://127.0.0.1:9999/train-curriculum", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          config: backendData,
+          config: {
+            ...backendData,
+            action_costs: actionCosts,
+            weights: weights,
+          },
           curriculum,
           ckptDir,
           maxEpisodes,
@@ -211,97 +230,87 @@ export default function App() {
   const handleEvaluate = () => setEvalModalOpen(true);
 
   const handleVerify = () => {
-  setVerifyModalOpen(true);
-};
+    setVerifyModalOpen(true);
+  };
 
   const runEvaluate = async ({ ckptPath, heuristicAgent, numEpisodes, maxTimesteps }) => {
-  try {
-    const params = new URLSearchParams();
-    if (ckptPath) params.set("ckpt_path", ckptPath);
-    if (heuristicAgent) params.set("heuristic_agent", heuristicAgent);
-    params.set("num_episodes", String(numEpisodes));
-    params.set("max_timesteps", String(maxTimesteps));
+    try {
+      const params = new URLSearchParams();
+      if (ckptPath) params.set("ckpt_path", ckptPath);
+      if (heuristicAgent) params.set("heuristic_agent", heuristicAgent);
+      params.set("num_episodes", String(numEpisodes));
+      params.set("max_timesteps", String(maxTimesteps));
 
-    const res = await fetch(
-      `http://127.0.0.1:9999/evaluate?${params.toString()}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(backendData),
+      const res = await fetch(
+        `http://127.0.0.1:9999/evaluate?${params.toString()}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...backendData,
+            action_costs: state?.actionCosts || DEFAULT_COSTS,
+            weights: state?.weights || DEFAULT_WEIGHTS,
+          }),
+        }
+      );
+      if (!res.ok) {
+        const message = await res.text();
+        throw new Error(message || `HTTP ${res.status}`);
       }
-    );
-    if (!res.ok) {
-      const message = await res.text();
-      throw new Error(message || `HTTP ${res.status}`);
-    }
 
-    setEvalModalOpen(false);
-    setEvalState("running");
-    setTab("evaluation");
-    showToast("Evaluation started ✓");
-  } catch (err) {
-    showToast(`Failed: ${err.message}`);
-  }
-};
+      setEvalModalOpen(false);
+      setEvalState("running");
+      setTab("evaluation");
+      showToast("Evaluation started ✓");
+    } catch (err) {
+      showToast(`Failed: ${err.message}`);
+    }
+  };
 
   const runVerify = async ({
-  ckptPath,
-  heuristicAgent,
-  topK,
-  partialObservability,
-  fvApproach,
-}) => {
-  try {
-    const params = new URLSearchParams();
+    ckptPath,
+    heuristicAgent,
+    topK,
+    partialObservability,
+    fvApproach,
+  }) => {
+    try {
+      const params = new URLSearchParams();
 
-    if (ckptPath) {
-      params.set("ckpt_path", ckptPath);
-    }
+      if (ckptPath) params.set("ckpt_path", ckptPath);
+      if (heuristicAgent) params.set("heuristic_agent", heuristicAgent);
 
-    if (heuristicAgent) {
-      params.set("heuristic_agent", heuristicAgent);
-    }
+      params.set("top_k", String(topK));
+      params.set("partial_observability", String(partialObservability));
+      params.set("fv_approach", fvApproach);
 
-    params.set("top_k", String(topK));
-    params.set(
-      "partial_observability",
-      String(partialObservability)
-    );
-    params.set("fv_approach", fvApproach);
+      const res = await fetch(
+        `http://127.0.0.1:9999/verify?${params.toString()}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...backendData,
+            action_costs: state?.actionCosts || DEFAULT_COSTS,
+            weights: state?.weights || DEFAULT_WEIGHTS,
+          }),
+        }
+      );
 
-    console.log("Verification parameters:", {
-      ckptPath,
-      heuristicAgent,
-      topK,
-      partialObservability,
-      fvApproach,
-    });
-
-    const res = await fetch(
-      `http://127.0.0.1:9999/verify?${params.toString()}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(backendData),
+      if (!res.ok) {
+        const message = await res.text();
+        throw new Error(message || `HTTP ${res.status}`);
       }
-    );
 
-    if (!res.ok) {
-      const message = await res.text();
-      throw new Error(message || `HTTP ${res.status}`);
+      setVerifyModalOpen(false);
+      setVerifySignal((n) => n + 1);
+      setTab("verification");
+      setVerificationView("bfs");
+      showToast("Verification started ✓");
+    } catch (err) {
+      showToast(`Failed: ${err.message}`);
     }
-
-    setVerifyModalOpen(false);
-    setVerifySignal((n) => n + 1);
-    setTab("verification");
-    setVerificationView("bfs");
-    showToast("Verification started ✓");
-  } catch (err) {
-    showToast(`Failed: ${err.message}`);
-  }
-};
+  };
 
   const handleToggleVisualizer = async () => {
     const enabled = !visualizerOn;
@@ -571,6 +580,7 @@ export default function App() {
           onClose={() => setTrainModalOpen(false)}
           onRun={runTrain}
           hostCount={state.hosts?.length || 0}
+          state={state}
         />
       )}
       {evalModalOpen && (
