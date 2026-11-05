@@ -13,13 +13,14 @@ const DEFAULT_COSTS = {
   decoy: 0.0,
   remove: 0.0,
   restore: -1.0,
+  impact: 10.0,
 };
 
 const DEFAULT_WEIGHTS = {
-  betweenness: 1,
-  distance: 1,
-  successors: 1,
-  gateway: 1,
+  betweenness: 0,
+  distance: 0,
+  successors: 0,
+  gateway: 0,
 };
 
 const styles = {
