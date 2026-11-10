@@ -8,7 +8,7 @@ const DEFAULT_COSTS = {
   decoy: 0.0,
   remove: 0.0,
   restore: -1.0,
-  impact: 10.0,
+  impact: -10.0,
 };
 
 const DEFAULT_WEIGHTS = {
