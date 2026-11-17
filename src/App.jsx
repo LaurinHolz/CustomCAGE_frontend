@@ -214,11 +214,12 @@ export default function App() {
   setVerifyModalOpen(true);
 };
 
-  const runEvaluate = async ({ ckptPath, heuristicAgent, numEpisodes, maxTimesteps }) => {
+  const runEvaluate = async ({ ckptPath, heuristicAgent, llmModel, numEpisodes, maxTimesteps }) => {
   try {
     const params = new URLSearchParams();
     if (ckptPath) params.set("ckpt_path", ckptPath);
     if (heuristicAgent) params.set("heuristic_agent", heuristicAgent);
+    if (llmModel) params.set("llm_model", llmModel);
     params.set("num_episodes", String(numEpisodes));
     params.set("max_timesteps", String(maxTimesteps));
 
@@ -247,6 +248,7 @@ export default function App() {
   const runVerify = async ({
   ckptPath,
   heuristicAgent,
+  llmModel,
   topK,
   partialObservability,
   fvApproach,
@@ -262,6 +264,9 @@ export default function App() {
 
     if (heuristicAgent) {
       params.set("heuristic_agent", heuristicAgent);
+    }
+    if (llmModel) {
+      params.set("llm_model", llmModel);
     }
 
     params.set("top_k", String(topK));
@@ -282,6 +287,7 @@ export default function App() {
     console.log("Verification parameters:", {
       ckptPath,
       heuristicAgent,
+      llmModel,
       topK,
       partialObservability,
       fvApproach,

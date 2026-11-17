@@ -211,6 +211,7 @@ export default function VerificationStatistics() {
 
   const wasRunningRef = useRef(false);
   const timerRef = useRef(null);
+  const checkedOnceRef = useRef(false);    // Load stats only once on mount (the old check reloaded on every idle poll and caused constant warnings)
 
   const loadStats = useCallback(async () => {
     try {
@@ -245,7 +246,9 @@ export default function VerificationStatistics() {
           setVerifyRunning(running);
 
           const justFinished = wasRunningRef.current && !running;
-          const firstCheck = !wasRunningRef.current && !running;
+          //const firstCheck = !wasRunningRef.current && !running;
+          const firstCheck = !checkedOnceRef.current && !running;
+          checkedOnceRef.current = true;
 
           if (justFinished || firstCheck) {
             await loadStats();

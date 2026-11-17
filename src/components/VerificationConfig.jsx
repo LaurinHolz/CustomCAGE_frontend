@@ -186,6 +186,7 @@ export default function VerifyModal({ onClose, onVerify }) {
   const [hoveredPath, setHoveredPath] = useState(null);
   const [selectedHeuristic, setSelectedHeuristic] = useState("");
   const [hoveredHeuristic, setHoveredHeuristic] = useState(null);
+  const [llmModel, setLlmModel] = useState("");
 
   // FV controls
   const [topK, setTopK] = useState(1);
@@ -239,7 +240,9 @@ export default function VerifyModal({ onClose, onVerify }) {
 
   const blueAgentValid = mode === "heuristic"
     ? !!selectedHeuristic
-    : !loading && !!chosenPath;
+    : mode === "llm"
+      ? !!llmModel.trim()
+      : !loading && !!chosenPath;
 
   const isPartitioned = fvApproach === "free-dyna-partioned";
   const approachMeta = PARTITION_APPROACHES.find((a) => a.value === partitionApproach);
@@ -251,7 +254,7 @@ export default function VerifyModal({ onClose, onVerify }) {
 
   const canRun = blueAgentValid
     && obsValid
-    && (mode === "heuristic" || topKValid)
+    && (mode === "heuristic" || mode === "llm" || topKValid)
     && partitionValid;
 
   const handleRun = () => {
@@ -260,7 +263,8 @@ export default function VerifyModal({ onClose, onVerify }) {
     onVerify({
       ckptPath: mode === "browse" ? chosenPath : null,
       heuristicAgent: mode === "heuristic" ? selectedHeuristic : null,
-      topK: mode === "heuristic" ? 1 : topKValue,
+      llmModel: mode === "llm" ? llmModel.trim() : null,
+      topK: mode === "browse" || mode === "latest" ? topKValue : 1,    // heuristic and LLM agents are deterministic, so force top-k = 1
       partialObservability: obsValue,
       fvApproach,
       // Only send partition config when it's relevant; subnet ignores k.
@@ -275,7 +279,7 @@ export default function VerifyModal({ onClose, onVerify }) {
         <div style={styles.header}>
           <div>
             <h3 style={styles.title}>Run verification</h3>
-            <p style={styles.subtitle}>Select a trained checkpoint or a heuristic Blue agent, configure the verification model, and run formal verification.</p>
+            <p style={styles.subtitle}>Select a trained checkpoint, a heuristic Blue agent or a LLM Blue agent, configure the verification model, and run formal verification.</p>
           </div>
           <button style={styles.closeBtn} onClick={onClose}>×</button>
         </div>
@@ -288,6 +292,7 @@ export default function VerifyModal({ onClose, onVerify }) {
               <button style={styles.segmentBtn(mode === "latest")} onClick={() => setMode("latest")}>Latest</button>
               <button style={styles.segmentBtn(mode === "browse")} onClick={() => setMode("browse")}>Browse files</button>
               <button style={styles.segmentBtn(mode === "heuristic")} onClick={() => setMode("heuristic")}>Heuristic Blue Agents</button>
+              <button style={styles.segmentBtn(mode === "llm")} onClick={() => setMode("llm")}>LLM Blue Agent</button>
             </div>
 
             {mode === "latest" && (
@@ -398,6 +403,19 @@ export default function VerifyModal({ onClose, onVerify }) {
                       </div>
                     );
                   })}
+                </div>
+              </div>
+            )}
+            {mode === "llm" && (
+              <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+                <input
+                  style={styles.input}
+                  placeholder="Ollama model name, e.g. gemma3:1b"
+                  value={llmModel}
+                  onChange={(e) => setLlmModel(e.target.value)}
+                />
+                <div style={styles.emptyState}>
+                  The model must be available in the local Ollama server.
                 </div>
               </div>
             )}

@@ -145,6 +145,7 @@ export default function EvaluateModal({ onClose, onRun }) {
   const [hoveredPath, setHoveredPath] = useState(null);
   const [selectedHeuristic, setSelectedHeuristic] = useState("");
   const [hoveredHeuristic, setHoveredHeuristic] = useState(null);
+  const [llmModel, setLlmModel] = useState("");
   const [numEpisodes, setNumEpisodes] = useState(20);
   const [maxTimesteps, setMaxTimesteps] = useState(100);
 
@@ -183,7 +184,12 @@ export default function EvaluateModal({ onClose, onRun }) {
 
   const canRun = mode === "heuristic"
     ? !!selectedHeuristic
-    : !loading && !!chosenPath;
+    : mode === "llm"
+      ? !!llmModel.trim()
+      : !loading && !!chosenPath;
+
+  // Upper bound on LLM calls (one per step), shown so the user knows how long the run can take.
+  const llmCalls = Math.max(1, parseInt(numEpisodes, 10) || 20) * Math.max(1, parseInt(maxTimesteps, 10) || 100);
 
   const handleRun = () => {
     if (!canRun) return;
@@ -191,6 +197,7 @@ export default function EvaluateModal({ onClose, onRun }) {
     onRun({
       ckptPath: mode === "browse" ? chosenPath : null,
       heuristicAgent: mode === "heuristic" ? selectedHeuristic : null,
+      llmModel: mode === "llm" ? llmModel.trim() : null,
       numEpisodes: Math.max(1, parseInt(numEpisodes, 10) || 20),
       maxTimesteps: Math.max(1, parseInt(maxTimesteps, 10) || 100),
     });
@@ -202,7 +209,7 @@ export default function EvaluateModal({ onClose, onRun }) {
         <div style={styles.header}>
           <div>
             <h3 style={styles.title}>Run evaluation</h3>
-            <p style={styles.subtitle}>Select a trained checkpoint or a heuristic Blue agent and configure the episode budget.</p>
+            <p style={styles.subtitle}>Select a trained checkpoint, a heuristic Blue agent or a LLM Blue agent and configure the episode budget.</p>
           </div>
           <button style={styles.closeBtn} onClick={onClose}>×</button>
         </div>
@@ -214,6 +221,7 @@ export default function EvaluateModal({ onClose, onRun }) {
               <button style={styles.segmentBtn(mode === "latest")} onClick={() => setMode("latest")}>Latest</button>
               <button style={styles.segmentBtn(mode === "browse")} onClick={() => setMode("browse")}>Browse files</button>
               <button style={styles.segmentBtn(mode === "heuristic")} onClick={() => setMode("heuristic")}>Heuristic Blue Agents</button>
+              <button style={styles.segmentBtn(mode === "llm")} onClick={() => setMode("llm")}>LLM Blue Agent</button>
             </div>
 
             {mode === "latest" && (
@@ -324,6 +332,20 @@ export default function EvaluateModal({ onClose, onRun }) {
                       </div>
                     );
                   })}
+                </div>
+              </div>
+            )}
+
+            {mode === "llm" && (
+              <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+                <input
+                  style={styles.input}
+                  placeholder="Ollama model name, e.g. gemma3:1b"
+                  value={llmModel}
+                  onChange={(e) => setLlmModel(e.target.value)}
+                />
+                <div style={styles.emptyState}>
+                  The model must be available in the local Ollama server. This run makes up to {llmCalls} LLM calls.
                 </div>
               </div>
             )}
