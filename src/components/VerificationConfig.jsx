@@ -187,6 +187,7 @@ export default function VerifyModal({ onClose, onVerify }) {
   const [selectedHeuristic, setSelectedHeuristic] = useState("");
   const [hoveredHeuristic, setHoveredHeuristic] = useState(null);
   const [llmModel, setLlmModel] = useState("");
+  const [llmHistory, setLlmHistory] = useState(0);
 
   // FV controls
   const [topK, setTopK] = useState(1);
@@ -234,6 +235,9 @@ export default function VerifyModal({ onClose, onVerify }) {
   const topKValue = parseInt(topK, 10);
   const topKValid = Number.isFinite(topKValue) && topKValue >= 1;
 
+  const llmHistoryValue = parseInt(llmHistory, 10);
+  const llmHistoryValid = Number.isFinite(llmHistoryValue) && llmHistoryValue >= 0;
+
   const usingCustomObs = obsCustom.trim() !== "";
   const obsValue = usingCustomObs ? Number(obsCustom) : obsPreset;
   const obsValid = Number.isFinite(obsValue) && obsValue >= 0 && obsValue <= 1;
@@ -241,7 +245,7 @@ export default function VerifyModal({ onClose, onVerify }) {
   const blueAgentValid = mode === "heuristic"
     ? !!selectedHeuristic
     : mode === "llm"
-      ? !!llmModel.trim()
+      ? !!llmModel.trim() && llmHistoryValid
       : !loading && !!chosenPath;
 
   const isPartitioned = fvApproach === "free-dyna-partioned";
@@ -264,6 +268,7 @@ export default function VerifyModal({ onClose, onVerify }) {
       ckptPath: mode === "browse" ? chosenPath : null,
       heuristicAgent: mode === "heuristic" ? selectedHeuristic : null,
       llmModel: mode === "llm" ? llmModel.trim() : null,
+      llmHistory: mode === "llm" ? llmHistoryValue : null,
       topK: mode === "browse" || mode === "latest" ? topKValue : 1,    // heuristic and LLM agents are deterministic, so force top-k = 1
       partialObservability: obsValue,
       fvApproach,
@@ -422,7 +427,7 @@ export default function VerifyModal({ onClose, onVerify }) {
           </div>
 
           {/* ---- Stochastic policy ---- */}
-          {mode !== "heuristic" && (
+          {mode !== "heuristic" && mode !== "llm" && (
             <div>
               <div style={styles.sectionLabel}>Stochastic policy</div>
               <div style={styles.numberField}>
@@ -446,6 +451,28 @@ export default function VerifyModal({ onClose, onVerify }) {
               <div style={styles.emptyState}>
                 Heuristic Blue agents are deterministic. Formal verification therefore uses one selected action per state (top-k = 1).
               </div>
+            </div>
+          )}
+
+          {mode === "llm" && (    // LLM-specific settings, especially the selection of the last-i llm actions
+            <div>
+              <div style={styles.sectionLabel}>Policy semantics</div>
+              <div style={styles.emptyState}>
+                LLM agents with temperature = 0 are deterministic. Formal verification therefore uses one selected action per state (top-k = 1).
+              </div>
+              <div style={{ ...styles.sectionLabel, marginTop: "20px" }}>History</div>
+              <div style={styles.numberField}>
+                <label style={styles.numberLabel}>Last-i llm actions</label>
+                <input
+                  style={styles.input} type="number" min="0" step="1"
+                  value={llmHistory}
+                  onChange={(e) => setLlmHistory(e.target.value)}
+                />
+              </div>
+              <p style={styles.helperText}>
+                i = 0 incorporates no history to the prompt. Including the last-i actions can lead to a FV states/nodes blowup into up to (#actions * #hosts + 1)^(i) nodes.
+              </p>
+              {!llmHistoryValid && <p style={styles.errorText}>Last-i must be an integer ≥ 0.</p>}
             </div>
           )}
 

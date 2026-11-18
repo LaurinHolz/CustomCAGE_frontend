@@ -146,6 +146,7 @@ export default function EvaluateModal({ onClose, onRun }) {
   const [selectedHeuristic, setSelectedHeuristic] = useState("");
   const [hoveredHeuristic, setHoveredHeuristic] = useState(null);
   const [llmModel, setLlmModel] = useState("");
+  const [llmHistory, setLlmHistory] = useState(0);
   const [numEpisodes, setNumEpisodes] = useState(20);
   const [maxTimesteps, setMaxTimesteps] = useState(100);
 
@@ -182,10 +183,13 @@ export default function EvaluateModal({ onClose, onRun }) {
       ? (customPath.trim() || selectedPath)
       : null;
 
+  const llmHistoryValue = parseInt(llmHistory, 10);
+  const llmHistoryValid = Number.isFinite(llmHistoryValue) && llmHistoryValue >= 0;
+
   const canRun = mode === "heuristic"
     ? !!selectedHeuristic
     : mode === "llm"
-      ? !!llmModel.trim()
+      ? !!llmModel.trim() && llmHistoryValid
       : !loading && !!chosenPath;
 
   // Upper bound on LLM calls (one per step), shown so the user knows how long the run can take.
@@ -198,6 +202,7 @@ export default function EvaluateModal({ onClose, onRun }) {
       ckptPath: mode === "browse" ? chosenPath : null,
       heuristicAgent: mode === "heuristic" ? selectedHeuristic : null,
       llmModel: mode === "llm" ? llmModel.trim() : null,
+      llmHistory: mode === "llm" ? llmHistoryValue : null,
       numEpisodes: Math.max(1, parseInt(numEpisodes, 10) || 20),
       maxTimesteps: Math.max(1, parseInt(maxTimesteps, 10) || 100),
     });
@@ -347,6 +352,19 @@ export default function EvaluateModal({ onClose, onRun }) {
                 <div style={styles.emptyState}>
                   The model must be available in the local Ollama server. This run makes up to {llmCalls} LLM calls.
                 </div>
+                <div style={{ ...styles.sectionLabel, marginTop: "20px", marginBottom: "0px" }}>History</div>
+                <div style={styles.numberField}>
+                  <label style={styles.numberLabel}>Last-i llm actions</label>
+                  <input
+                    style={styles.input} type="number" min="0" step="1"
+                    value={llmHistory}
+                    onChange={(e) => setLlmHistory(e.target.value)}
+                  />
+                </div>
+                <p style={{ ...styles.helperText, fontSize: "11px", color: "#888", marginTop: "4px", marginBottom: "0px" }}>
+                  i = 0 incorporates no history to the prompt.
+                </p>
+                {!llmHistoryValid && <p style={{...styles.errorText, fontSize: "11px", color: "#bb4e4e", marginTop: "4px", marginBottom: "0px" }}>Last-i must be an integer ≥ 0.</p>}
               </div>
             )}
           </div>
